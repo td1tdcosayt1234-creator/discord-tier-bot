@@ -17,9 +17,11 @@ db.exec(`
     guild_id TEXT NOT NULL,
     tier TEXT NOT NULL,
     position INTEGER NOT NULL,
+    emoji TEXT,
     PRIMARY KEY (guild_id, tier)
   );
 `);
+try { db.exec('ALTER TABLE tiers ADD COLUMN emoji TEXT'); } catch { /* column already exists */ }
 
 import { DEFAULT_TIERS } from './data.js';
 
@@ -40,6 +42,16 @@ export function getTiers(guildId) {
     rows = db.prepare('SELECT tier FROM tiers WHERE guild_id = ? ORDER BY position').all(guildId);
   }
   return rows.map(r => r.tier);
+}
+
+export function getTierRows(guildId) {
+  getTiers(guildId); // ensure defaults exist
+  return db.prepare('SELECT tier, emoji FROM tiers WHERE guild_id = ? ORDER BY position').all(guildId);
+}
+
+export function setTierEmoji(guildId, tier, emoji) {
+  const res = db.prepare('UPDATE tiers SET emoji = ? WHERE guild_id = ? AND tier = ?').run(emoji, guildId, tier);
+  return res.changes > 0;
 }
 
 export function createTier(guildId, tier) {

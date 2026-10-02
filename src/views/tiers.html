@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tier List — Tier Bot Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <h2 class="page">🏆 <span id="listName">Tier List</span></h2>
+  <p class="sub">Live from the bot database. Paste your Server ID to manage.</p>
+
+  <div class="panel">
+    <div class="row">
+      <input id="guild" placeholder="Server ID (right-click server → Copy Server ID)">
+      <input id="key" type="password" placeholder="Dashboard key (for edits)" style="max-width:220px">
+      <button class="action" onclick="load()">Load</button>
+    </div>
+    <div class="hint">Discord-এ Developer Mode on করে server-এ right-click → <code>Copy Server ID</code>. Edit করতে <code>.env</code>-এর <code>DASHBOARD_KEY</code> দাও।</div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="tiers"></div>
+
+  <div class="panel">
+    <h2 class="page" style="font-size:18px">➕ Add player</h2>
+    <div class="row">
+      <input id="pTier" placeholder="Tier (e.g. S)">
+      <input id="pName" placeholder="Player name">
+      <button class="action" onclick="addPlayer()">Add</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="page" style="font-size:18px">🆕 Manage tiers</h2>
+    <div class="row">
+      <input id="tName" placeholder="Tier name (e.g. SS)">
+      <button class="action" onclick="createTier()">Create tier</button>
+    </div>
+    <div class="row">
+      <input id="eTier" placeholder="Tier">
+      <input id="eEmoji" placeholder="Emoji (e.g. 👑)">
+      <button class="action" onclick="setEmoji()">Set emoji</button>
+    </div>
+  </div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const FALLBACK = ['🔴','🟠','🟡','🟢','🔵','🟣','⚪','⚫','🟤','⭐'];
+  let current = null;
+
+  function showErr(m) { $('err').textContent = m || ''; }
+
+  async function load() {
+    showErr('');
+    const guild = $('guild').value.trim();
+    if (!guild) return showErr('Server ID দাও!');
+    localStorage.setItem('guild', guild);
+    localStorage.setItem('dkey', $('key').value);
+    try {
+      const r = await fetch('/api/tiers?guild=' + encodeURIComponent(guild));
+      const data = await r.json();
+      if (data.error) return showErr(data.error);
+      current = { guild, ...data };
+      render();
+    } catch { showErr('Load failed!'); }
+  }
+
+  function render() {
+    $('listName').textContent = current.name;
+    const box = $('tiers');
+    box.innerHTML = '';
+    current.tiers.forEach((t, i) => {
+      const div = document.createElement('div');
+      div.className = 'tier';
+      const emoji = t.emoji || FALLBACK[i % FALLBACK.length];
+      div.innerHTML = `<div class="tier-head">${emoji} ${t.tier}<span class="count">${t.players.length} player(s)</span></div>`;
+      const pl = document.createElement('div');
+      pl.className = 'players';
+      if (!t.players.length) pl.innerHTML = '<div class="empty">empty</div>';
+      t.players.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'player';
+        row.innerHTML = `<span>• ${p}</span>`;
+        const del = document.createElement('button');
+        del.className = 'action danger';
+        del.textContent = 'Remove';
+        del.onclick = () => delPlayer(t.tier, p);
+        row.appendChild(del);
+        pl.appendChild(row);
+      });
+      const tdel = document.createElement('button');
+      tdel.className = 'action danger';
+      tdel.style.cssText = 'margin:0 16px 12px;font-size:12px;padding:4px 10px';
+      tdel.textContent = 'Delete tier';
+      tdel.onclick = () => delTier(t.tier);
+      div.appendChild(pl);
+      div.appendChild(tdel);
+      box.appendChild(div);
+    });
+  }
+
+  async function api(path, method, body) {
+    const r = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guild: $('guild').value.trim(), key: $('key').value, ...body }),
+    });
+    return r.json();
+  }
+
+  async function addPlayer() {
+    const tier = $('pTier').value.trim().toUpperCase();
+    const player = $('pName').value.trim();
+    if (!tier || !player) return showErr('Tier + player name দাও!');
+    const d = await api('/api/player', 'POST', { tier, player });
+    if (d.error) return showErr(d.error);
+    $('pName').value = '';
+    load();
+  }
+  async function delPlayer(tier, player) {
+    const d = await api('/api/player', 'DELETE', { tier, player });
+    if (d.error) return showErr(d.error);
+    load();
+  }
+  async function createTier() {
+    const tier = $('tName').value.trim().toUpperCase();
+    if (!tier) return showErr('Tier name দাও!');
+    const d = await api('/api/tier', 'POST', { tier });
+    if (d.error) return showErr(d.error);
+    $('tName').value = '';
+    load();
+  }
+  async function delTier(tier) {
+    if (!confirm(`Delete tier ${tier}?`)) return;
+    const d = await api('/api/tier', 'DELETE', { tier });
+    if (d.error) return showErr(d.error);
+    load();
+  }
+  async function setEmoji() {
+    const tier = $('eTier').value.trim().toUpperCase();
+    const emoji = $('eEmoji').value.trim();
+    if (!tier || !emoji) return showErr('Tier + emoji দাও!');
+    const d = await api('/api/emoji', 'POST', { tier, emoji });
+    if (d.error) return showErr(d.error);
+    load();
+  }
+
+  $('guild').value = localStorage.getItem('guild') || '';
+  $('key').value = localStorage.getItem('dkey') || '';
+  if ($('guild').value) load();
+</script>
+</body>
+</html>

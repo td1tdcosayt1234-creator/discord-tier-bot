@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commands — Tier Bot Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <h2 class="page">⌨️ Commands</h2>
+  <p class="sub">Prefix: <code style="background:#5865f2;padding:2px 8px;border-radius:6px;color:#fff">!</code> — type <code style="background:#2b2d31;padding:2px 8px;border-radius:6px">!help</code> in Discord too.</p>
+  <div class="cmd"><code>!tier show</code><p>Show the full tier list embed.</p></div>
+  <div class="cmd"><code>!tier add S PlayerName</code><p>Add a player to a tier.</p></div>
+  <div class="cmd"><code>!tier remove S PlayerName</code><p>Remove a player from a tier.</p></div>
+  <div class="cmd"><code>!tier create SS</code><p>Create a brand new tier.</p></div>
+  <div class="cmd"><code>!tier delete SS</code><p>Delete a tier and its players.</p></div>
+  <div class="cmd"><code>!tier emoji S 👑</code><p>Set a custom emoji shown before the tier. Use <code>clear</code> to reset.</p></div>
+  <div class="cmd"><code>!tier setname My List</code><p>Rename the tier list.</p></div>
+  <div class="cmd"><code>!tier reset</code><p>Clear all players (keeps tiers).</p></div>
+  <div class="cmd"><code>!ai your question</code><p>Ask the free AI — no key or login needed.</p></div>
+  <div class="cmd"><code>!ping</code><p>Check bot latency.</p></div>
+  <div class="cmd"><code>!8ball Will I win?</code><p>Magic 8-ball answers.</p></div>
+  <div class="cmd"><code>!roll 100</code><p>Roll a dice up to N.</p></div>
+  <div class="cmd"><code>!joke</code><p>Random joke.</p></div>
+  <div class="cmd"><code>!say hello</code><p>Bot echoes your text.</p></div>
+  <div class="cmd"><code>!avatar @user</code><p>Show someone's avatar.</p></div>
+  <div class="cmd"><code>!userinfo @user</code><p>Info about a user.</p></div>
+  <div class="cmd"><code>!serverinfo</code><p>Info about the server.</p></div>
+  <div class="cmd"><code>!clear 10</code><p>Bulk delete messages (mods only).</p></div>
+</main>
+<script src="/nav.js"></script>
+</body>
+</html>

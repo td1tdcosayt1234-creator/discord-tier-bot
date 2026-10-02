@@ -20,6 +20,7 @@ export default {
         `\`${PREFIX}tier show\` - Show the tier list`,
         `\`${PREFIX}tier create <NAME>\` - Create a new tier`,
         `\`${PREFIX}tier delete <NAME>\` - Delete a tier`,
+        `\`${PREFIX}tier emoji <TIER> <emoji>\` - Set tier emoji`,
         `\`${PREFIX}tier add <TIER> <player>\` - Add player to a tier`,
         `\`${PREFIX}tier remove <S/A/B/C/D> <player>\` - Remove player`,
         `\`${PREFIX}tier setname <name>\` - Rename the tier list`,

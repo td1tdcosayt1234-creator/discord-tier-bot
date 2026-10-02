@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Status — Tier Bot Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <h2 class="page">📡 Live Status</h2>
+  <p class="sub">Auto-refreshes every 10 seconds.</p>
+  <div class="status-grid">
+    <div class="stat"><div class="num" id="sBot">–</div><div class="lbl">Bot</div></div>
+    <div class="stat"><div class="num" id="sGuilds">–</div><div class="lbl">Servers</div></div>
+    <div class="stat"><div class="num" id="sUptime">–</div><div class="lbl">Uptime</div></div>
+  </div>
+  <h2 class="page" style="font-size:18px;margin:24px 0 12px">Raw health JSON</h2>
+  <pre class="json" id="raw">loading...</pre>
+</main>
+<script src="/nav.js"></script>
+<script>
+  async function refresh() {
+    try {
+      const h = await (await fetch('/api/health')).json();
+      document.getElementById('sBot').textContent = h.online ? '🟢' : '🔴';
+      document.getElementById('sGuilds').textContent = h.guilds ?? '–';
+      const s = h.uptimeSec || 0;
+      document.getElementById('sUptime').textContent =
+        s > 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm'
+                 : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+      document.getElementById('raw').textContent = JSON.stringify(h, null, 2);
+    } catch {
+      document.getElementById('raw').textContent = 'unreachable';
+    }
+  }
+  refresh();
+  setInterval(refresh, 10000);
+</script>
+</body>
+</html>

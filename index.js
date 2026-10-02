@@ -3,6 +3,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { startDashboard } from './src/dashboard.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PREFIX = process.env.PREFIX || '!';
@@ -32,6 +33,9 @@ client.once('clientReady', () => {
 
 client.on('error', console.error);
 client.on('shardError', console.error);
+client.on('shardDisconnect', e => console.error('[shardDisconnect]', e?.code));
+client.on('invalidated', () => console.error('[invalidated] session invalidated'));
+client.on('warn', console.warn);
 process.on('unhandledRejection', console.error);
 process.on('uncaughtException', console.error);
 
@@ -63,3 +67,5 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+
+startDashboard(client);

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home — Tier Bot Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <div class="hero">
+    <h1>Team Dhurbin Ete<br>Tier List Bot</h1>
+    <p>Rank players, set custom tier emojis, ask free AI — all from Discord or this panel.</p>
+    <div class="cta">
+      <a class="btn" href="/tiers">Open Tier List</a>
+      <a class="btn ghost" href="/commands">View Commands</a>
+    </div>
+  </div>
+
+  <div class="marquee"><span>🏆 RANK PLAYERS &nbsp;•&nbsp; 👑 CUSTOM TIER EMOJIS &nbsp;•&nbsp; 🤖 FREE AI &nbsp;•&nbsp; 🌐 LIVE WEB PANEL &nbsp;•&nbsp; 💾 SQLITE DATABASE &nbsp;•&nbsp; 🏆 RANK PLAYERS &nbsp;•&nbsp; 👑 CUSTOM TIER EMOJIS &nbsp;•&nbsp; 🤖 FREE AI &nbsp;•&nbsp; 🌐 LIVE WEB PANEL &nbsp;•&nbsp; 💾 SQLITE DATABASE &nbsp;•&nbsp;</span></div>
+
+  <div class="stats">
+    <div class="stat"><div class="num" id="stServers">–</div><div class="lbl">Servers</div></div>
+    <div class="stat"><div class="num" id="stBot">–</div><div class="lbl">Bot</div></div>
+    <div class="stat"><div class="num" id="stUptime">–</div><div class="lbl">Uptime</div></div>
+    <div class="stat"><div class="num">24/7</div><div class="lbl">Watchdog</div></div>
+  </div>
+
+  <div class="cards">
+    <a class="card" href="/tiers"><div class="ico">🏆</div><h3>Tier List</h3><p>View, add players, create tiers and set emojis — live from the database.</p></a>
+    <a class="card" href="/commands"><div class="ico">⌨️</div><h3>Commands</h3><p>Every bot command with examples. Type !help in Discord too.</p></a>
+    <a class="card" href="/status"><div class="ico">📡</div><h3>Status</h3><p>Live bot health, uptime and API diagnostics.</p></a>
+  </div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  (async function () {
+    try {
+      const h = await (await fetch('/api/health')).json();
+      animateNum('stServers', h.guilds || 0, '');
+      document.getElementById('stBot').textContent = h.online ? '🟢' : '🔴';
+      const s = h.uptimeSec || 0;
+      const fmt = s > 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+      animateNum('stUptime', fmt, null);
+    } catch { /* offline */ }
+  })();
+  function animateNum(id, target, suffix) {
+    const el = document.getElementById(id);
+    if (typeof target !== 'number') { el.textContent = target; return; }
+    let cur = 0;
+    const step = () => {
+      cur += Math.max(1, Math.ceil((target - cur) / 8));
+      if (cur >= target) { el.textContent = target + (suffix || ''); return; }
+      el.textContent = cur + (suffix || '');
+      requestAnimationFrame(step);
+    };
+    step();
+  }
+</script>
+</body>
+</html>
