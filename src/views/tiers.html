@@ -7,11 +7,12 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div class="orb orb1"></div><div class="orb orb2"></div>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
 <nav>
   <span class="logo">🤖 TierBot</span>
   <a data-page href="/">Home</a>
   <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/ai">AI Chat</a>
   <a data-page href="/commands">Commands</a>
   <a data-page href="/status">Status</a>
   <span class="dot" id="navDot"></span>
@@ -58,6 +59,7 @@
 <script>
   const $ = id => document.getElementById(id);
   const FALLBACK = ['🔴','🟠','🟡','🟢','🔵','🟣','⚪','⚫','🟤','⭐'];
+  const COLORS = ['#ff4655','#ff9f1c','#ffd23f','#06d6a0','#118ab2','#9b5de5','#e0e0e0','#80848e','#9c6644','#ff70a6'];
   let current = null;
 
   function showErr(m) { $('err').textContent = m || ''; }
@@ -82,17 +84,20 @@
     const box = $('tiers');
     box.innerHTML = '';
     current.tiers.forEach((t, i) => {
+      const color = COLORS[i % COLORS.length];
       const div = document.createElement('div');
       div.className = 'tier';
+      div.style.setProperty('--tc', color);
       const emoji = t.emoji || FALLBACK[i % FALLBACK.length];
-      div.innerHTML = `<div class="tier-head">${emoji} ${t.tier}<span class="count">${t.players.length} player(s)</span></div>`;
+      div.innerHTML = `<div class="tier-head"><span class="t-emoji">${emoji}</span> ${t.tier}<span class="count">${t.players.length} player(s)</span></div>`;
       const pl = document.createElement('div');
       pl.className = 'players';
-      if (!t.players.length) pl.innerHTML = '<div class="empty">empty</div>';
-      t.players.forEach(p => {
+      if (!t.players.length) pl.innerHTML = '<div class="empty">✨ empty — add the first legend!</div>';
+      t.players.forEach((p, j) => {
         const row = document.createElement('div');
         row.className = 'player';
-        row.innerHTML = `<span>• ${p}</span>`;
+        row.style.animationDelay = (j * 0.06) + 's';
+        row.innerHTML = `<div class="ava">${p.trim().charAt(0).toUpperCase()}</div><span>${p}</span>`;
         const del = document.createElement('button');
         del.className = 'action danger';
         del.textContent = 'Remove';

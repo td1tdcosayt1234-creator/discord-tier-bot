@@ -44,6 +44,7 @@ Animated multi-page web panel (default: http://localhost:3000):
 
 - `/` - Home with live stats + animated UI
 - `/tiers` - View/add/remove players, create/delete tiers, set emojis
+- `/ai` - AI Playground: chat with free AI in the browser
 - `/commands` - All bot commands reference
 - `/status` - Live bot health + uptime
 - Set `DASHBOARD_KEY` in `.env` and enter it on the page to enable edits

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Chat — Tier Bot Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/ai">AI Chat</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <h2 class="page">🤖 AI Playground</h2>
+  <p class="sub">Free AI — no key, no login. Same brain as the <code style="background:#2b2d31;padding:2px 8px;border-radius:6px">!ai</code> command.</p>
+  <div class="panel">
+    <div class="chat-box" id="chat">
+      <div class="msg bot welcome">👋 Hey! Ask me anything — Bangla, English, code, anything!</div>
+    </div>
+    <div class="chat-input">
+      <input id="prompt" placeholder="Type your question..." autocomplete="off">
+      <button class="action" id="sendBtn" onclick="send()">Send ➤</button>
+    </div>
+  </div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  const chat = document.getElementById('chat');
+  const input = document.getElementById('prompt');
+  const btn = document.getElementById('sendBtn');
+
+  function bubble(text, who) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + who;
+    d.textContent = text;
+    chat.appendChild(d);
+    chat.scrollTop = chat.scrollHeight;
+    return d;
+  }
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text || btn.disabled) return;
+    bubble(text, 'user');
+    input.value = '';
+    btn.disabled = true;
+    const t = document.createElement('div');
+    t.className = 'msg bot';
+    t.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
+    chat.appendChild(t);
+    chat.scrollTop = chat.scrollHeight;
+    try {
+      const r = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text }),
+      });
+      const d = await r.json();
+      t.textContent = d.reply || d.error || 'Something went wrong!';
+    } catch {
+      t.textContent = '⚠️ Connection failed, try again!';
+    }
+    chat.scrollTop = chat.scrollHeight;
+    btn.disabled = false;
+    input.focus();
+  }
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  input.focus();
+</script>
+</body>
+</html>

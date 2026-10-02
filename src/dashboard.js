@@ -5,6 +5,7 @@ import {
   getTierName, getTierRows, getPlayers,
   createTier, deleteTier, addPlayer, removePlayer, setTierEmoji,
 } from './db.js';
+import { askAI } from './ai.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +22,7 @@ export function startDashboard(client) {
   app.get('/tiers', (req, res) => res.sendFile(join(__dirname, 'views', 'tiers.html')));
   app.get('/commands', (req, res) => res.sendFile(join(__dirname, 'views', 'commands.html')));
   app.get('/status', (req, res) => res.sendFile(join(__dirname, 'views', 'status.html')));
+  app.get('/ai', (req, res) => res.sendFile(join(__dirname, 'views', 'ai.html')));
 
   // API
   app.get('/api/health', (req, res) => {
@@ -88,6 +90,15 @@ export function startDashboard(client) {
     if (!guild || !tier) return res.status(400).json({ error: 'Missing guild/tier' });
     const ok = setTierEmoji(String(guild), String(tier).toUpperCase(), emoji || null);
     res.json(ok ? { ok: true } : { error: 'Tier not found' });
+  });
+
+  // Public AI playground - same free providers as the !ai command
+  app.post('/api/ai', async (req, res) => {
+    const prompt = String(req.body?.prompt || '').slice(0, 1000).trim();
+    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+    const reply = await askAI(prompt);
+    if (!reply) return res.status(503).json({ error: 'AI is busy right now, try again later!' });
+    res.json({ reply: reply.slice(0, 2000) });
   });
 
   const server = app.listen(PORT, () => console.log(`🌐 Dashboard: http://localhost:${PORT}`));
