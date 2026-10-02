@@ -13,7 +13,15 @@ db.exec(`
     guild_id TEXT PRIMARY KEY,
     name TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS tiers (
+    guild_id TEXT NOT NULL,
+    tier TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, tier)
+  );
 `);
+
+import { DEFAULT_TIERS } from './data.js';
 
 export function getTierName(guildId) {
   const row = db.prepare('SELECT name FROM tier_settings WHERE guild_id = ?').get(guildId);
@@ -22,6 +30,34 @@ export function getTierName(guildId) {
 
 export function setTierName(guildId, name) {
   db.prepare('INSERT INTO tier_settings (guild_id, name) VALUES (?, ?) ON CONFLICT(guild_id) DO UPDATE SET name = excluded.name').run(guildId, name);
+}
+
+export function getTiers(guildId) {
+  let rows = db.prepare('SELECT tier FROM tiers WHERE guild_id = ? ORDER BY position').all(guildId);
+  if (rows.length === 0) {
+    const insert = db.prepare('INSERT INTO tiers (guild_id, tier, position) VALUES (?, ?, ?)');
+    DEFAULT_TIERS.forEach((t, i) => insert.run(guildId, t, i));
+    rows = db.prepare('SELECT tier FROM tiers WHERE guild_id = ? ORDER BY position').all(guildId);
+  }
+  return rows.map(r => r.tier);
+}
+
+export function createTier(guildId, tier) {
+  const existing = db.prepare('SELECT 1 FROM tiers WHERE guild_id = ? AND tier = ?').get(guildId, tier);
+  if (existing) return false;
+  const count = db.prepare('SELECT COUNT(*) AS n FROM tiers WHERE guild_id = ?').get(guildId).n;
+  db.prepare('INSERT INTO tiers (guild_id, tier, position) VALUES (?, ?, ?)').run(guildId, tier, count);
+  return true;
+}
+
+export function deleteTier(guildId, tier) {
+  const row = db.prepare('SELECT 1 FROM tiers WHERE guild_id = ? AND tier = ?').get(guildId, tier);
+  if (!row) return null;
+  const total = db.prepare('SELECT COUNT(*) AS n FROM tiers WHERE guild_id = ?').get(guildId).n;
+  if (total <= 1) return 'last';
+  const players = db.prepare('DELETE FROM tier_players WHERE guild_id = ? AND tier = ?').run(guildId, tier);
+  db.prepare('DELETE FROM tiers WHERE guild_id = ? AND tier = ?').run(guildId, tier);
+  return players.changes;
 }
 
 export function getPlayers(guildId) {

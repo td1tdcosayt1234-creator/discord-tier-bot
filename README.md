@@ -29,7 +29,9 @@ A cool Discord bot built with discord.js.
 - `!serverinfo` - Server info
 - `!clear <amount>` - Bulk delete messages (mods)
 - `!tier show` - Show the tier list
-- `!tier add <S/A/B/C/D> <player>` - Add player to a tier
-- `!tier remove <S/A/B/C/D> <player>` - Remove player from a tier
+- `!tier create <NAME>` - Create a new tier (e.g. `!tier create SS`)
+- `!tier delete <NAME>` - Delete a tier
+- `!tier add <TIER> <player>` - Add player to a tier
+- `!tier remove <TIER> <player>` - Remove player from a tier
 - `!tier setname <name>` - Rename the tier list
 - `!tier reset` - Clear everyone from the tier list
