@@ -11,6 +11,7 @@ export default {
         `\`${PREFIX}8ball <question>\` - Ask the magic 8-ball`,
         `\`${PREFIX}roll [number]\` - Roll a dice`,
         `\`${PREFIX}joke\` - Get a random joke`,
+        `\`${PREFIX}ai <question>\` - Ask the free AI (no key needed)`,
         `\`${PREFIX}say <text>\` - Make the bot say something`,
         `\`${PREFIX}userinfo [@user]\` - Info about a user`,
         `\`${PREFIX}serverinfo\` - Info about this server`,

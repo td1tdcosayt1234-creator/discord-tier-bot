@@ -25,7 +25,7 @@ export default {
       tiers.forEach((t, i) => {
         const emoji = TIER_EMOJIS[i % TIER_EMOJIS.length];
         const list = players.filter(p => p.tier === t).map(p => `• ${p.player}`);
-        embed.addFields({ name: `${emoji} Tier ${t}`, value: list.length ? list.join('\n') : '_empty_' });
+        embed.addFields({ name: `${emoji} ${t}`, value: list.length ? list.join('\n') : '_empty_' });
       });
       return message.reply({ embeds: [embed] });
     }

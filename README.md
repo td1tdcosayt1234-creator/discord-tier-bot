@@ -23,6 +23,7 @@ A cool Discord bot built with discord.js.
 - `!8ball <question>` - Magic 8-ball
 - `!roll [number]` - Roll a dice
 - `!joke` - Random joke
+- `!ai <question>` - Ask the free AI (no key/login needed)
 - `!say <text>` - Bot echoes text
 - `!avatar [@user]` - Get avatar
 - `!userinfo [@user]` - User info
