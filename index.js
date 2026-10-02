@@ -25,10 +25,15 @@ for (const file of readdirSync(commandsDir)) {
   commands.set(mod.default.name, mod.default);
 }
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
   client.user.setActivity(`${PREFIX}help for commands`, { type: 0 });
 });
+
+client.on('error', console.error);
+client.on('shardError', console.error);
+process.on('unhandledRejection', console.error);
+process.on('uncaughtException', console.error);
 
 client.on('guildMemberAdd', member => {
   const welcomeChannel = member.guild.systemChannel;
@@ -39,6 +44,7 @@ client.on('guildMemberAdd', member => {
 
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.content.startsWith(PREFIX)) return;
+  if (!message.guild) return message.reply('❌ Commands only work in a server, not DMs.').catch(() => {});
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/g);
   const commandName = args.shift().toLowerCase();
