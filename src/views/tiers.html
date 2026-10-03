@@ -8,9 +8,11 @@
 </head>
 <body>
 <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
 <nav>
   <span class="logo">🤖 TierBot</span>
   <a data-page href="/">Home</a>
+  <a data-page href="/dashboard">Dashboard</a>
   <a data-page href="/tiers">Tier List</a>
   <a data-page href="/ai">AI Chat</a>
   <a data-page href="/commands">Commands</a>
@@ -27,7 +29,7 @@
       <input id="key" type="password" placeholder="Dashboard key (for edits)" style="max-width:220px">
       <button class="action" onclick="load()">Load</button>
     </div>
-    <div class="hint">Discord-এ Developer Mode on করে server-এ right-click → <code>Copy Server ID</code>. Edit করতে <code>.env</code>-এর <code>DASHBOARD_KEY</code> দাও।</div>
+    <div class="hint">Turn on Developer Mode in Discord, right-click the server → <code>Copy Server ID</code>.</div>
     <div class="err" id="err"></div>
   </div>
 
@@ -57,6 +59,7 @@
 </main>
 <script src="/nav.js"></script>
 <script>
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = id => document.getElementById(id);
   const FALLBACK = ['🔴','🟠','🟡','🟢','🔵','🟣','⚪','⚫','🟤','⭐'];
   const COLORS = ['#ff4655','#ff9f1c','#ffd23f','#06d6a0','#118ab2','#9b5de5','#e0e0e0','#80848e','#9c6644','#ff70a6'];
@@ -67,7 +70,7 @@
   async function load() {
     showErr('');
     const guild = $('guild').value.trim();
-    if (!guild) return showErr('Server ID দাও!');
+    if (!guild) return showErr('Enter the Server ID!');
     localStorage.setItem('guild', guild);
     localStorage.setItem('dkey', $('key').value);
     try {
@@ -89,7 +92,7 @@
       div.className = 'tier';
       div.style.setProperty('--tc', color);
       const emoji = t.emoji || FALLBACK[i % FALLBACK.length];
-      div.innerHTML = `<div class="tier-head"><span class="t-emoji">${emoji}</span> ${t.tier}<span class="count">${t.players.length} player(s)</span></div>`;
+      div.innerHTML = `<div class="tier-head"><span class="t-emoji">${esc(emoji)}</span> ${esc(t.tier)}<span class="count">${t.players.length} player(s)</span></div>`;
       const pl = document.createElement('div');
       pl.className = 'players';
       if (!t.players.length) pl.innerHTML = '<div class="empty">✨ empty — add the first legend!</div>';
@@ -97,7 +100,7 @@
         const row = document.createElement('div');
         row.className = 'player';
         row.style.animationDelay = (j * 0.06) + 's';
-        row.innerHTML = `<div class="ava">${p.trim().charAt(0).toUpperCase()}</div><span>${p}</span>`;
+        row.innerHTML = `<div class="ava">${esc(p.trim().charAt(0).toUpperCase())}</div><span>${esc(p)}</span>`;
         const del = document.createElement('button');
         del.className = 'action danger';
         del.textContent = 'Remove';
@@ -128,7 +131,7 @@
   async function addPlayer() {
     const tier = $('pTier').value.trim().toUpperCase();
     const player = $('pName').value.trim();
-    if (!tier || !player) return showErr('Tier + player name দাও!');
+    if (!tier || !player) return showErr('Enter tier + player name!');
     const d = await api('/api/player', 'POST', { tier, player });
     if (d.error) return showErr(d.error);
     $('pName').value = '';
@@ -141,7 +144,7 @@
   }
   async function createTier() {
     const tier = $('tName').value.trim().toUpperCase();
-    if (!tier) return showErr('Tier name দাও!');
+    if (!tier) return showErr('Enter a tier name!');
     const d = await api('/api/tier', 'POST', { tier });
     if (d.error) return showErr(d.error);
     $('tName').value = '';
@@ -156,7 +159,7 @@
   async function setEmoji() {
     const tier = $('eTier').value.trim().toUpperCase();
     const emoji = $('eEmoji').value.trim();
-    if (!tier || !emoji) return showErr('Tier + emoji দাও!');
+    if (!tier || !emoji) return showErr('Enter tier + emoji!');
     const d = await api('/api/emoji', 'POST', { tier, emoji });
     if (d.error) return showErr(d.error);
     load();

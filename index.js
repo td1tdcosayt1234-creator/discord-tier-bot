@@ -1,12 +1,22 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, ActivityType } from 'discord.js';
 import { readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { startDashboard } from './src/dashboard.js';
+import { handlePanelButton } from './src/aiPanel.js';
+import { handleMcpButton, handleMcpModal } from './src/mcpPanel.js';
+import { registerSlash, handleSlash, handleAutocomplete } from './src/slash.js';
+import { getAISession } from './src/db.js';
+import { askAI } from './src/ai.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PREFIX = process.env.PREFIX || '!';
+
+if (!process.env.DISCORD_TOKEN) {
+  console.error('[fatal] DISCORD_TOKEN is missing! Copy .env.example to .env and set DISCORD_TOKEN.');
+  process.exit(1);
+}
 
 const client = new Client({
   intents: [
@@ -22,13 +32,37 @@ const commands = new Map();
 const commandsDir = join(__dirname, 'src', 'commands');
 for (const file of readdirSync(commandsDir)) {
   if (!file.endsWith('.js')) continue;
-  const mod = await import(`./src/commands/${file}`);
-  commands.set(mod.default.name, mod.default);
+  try {
+    const mod = await import(`./src/commands/${file}`);
+    if (!mod?.default?.name || typeof mod.default.execute !== 'function') {
+      console.warn(`[commands] skipped ${file}: missing default { name, execute }`);
+      continue;
+    }
+    commands.set(mod.default.name, mod.default);
+  } catch (e) {
+    console.error(`[commands] failed to load ${file}:`, e.message);
+  }
+}
+console.log(`[commands] loaded: ${[...commands.keys()].join(', ')}`);
+
+// Simple per-user per-command cooldown (spam protection)
+const cooldowns = new Map();
+const COOLDOWN_MS = 3000;
+const AI_COOLDOWN_MS = 10000;
+function onCooldown(userId, cmd, ms) {
+  const useMs = ms ?? (cmd === 'ai' ? AI_COOLDOWN_MS : COOLDOWN_MS);
+  const key = `${userId}:${cmd}`;
+  const now = Date.now();
+  const last = cooldowns.get(key) || 0;
+  if (now - last < useMs) return Math.ceil((useMs - (now - last)) / 1000);
+  cooldowns.set(key, now);
+  return 0;
 }
 
-client.once('clientReady', () => {
-  console.log(`🤖 Logged in as ${client.user.tag}`);
-  client.user.setActivity(`${PREFIX}help for commands`, { type: 0 });
+client.once('clientReady', async () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  client.user.setActivity(`${PREFIX}help | /aipanel`, { type: ActivityType.Playing });
+  await registerSlash(client).catch(e => console.error('[slash]', e.message));
 });
 
 client.on('error', console.error);
@@ -41,31 +75,104 @@ process.on('uncaughtException', console.error);
 
 client.on('guildMemberAdd', member => {
   const welcomeChannel = member.guild.systemChannel;
-  if (welcomeChannel) {
-    welcomeChannel.send(`👋 Welcome to **${member.guild.name}**, ${member}! 🎉`);
+  if (welcomeChannel?.isTextBased?.()) {
+    welcomeChannel.send(`Welcome to **${member.guild.name}**, ${member}!`).catch(() => {});
   }
 });
 
 client.on('messageCreate', async message => {
-  if (message.author.bot || !message.content.startsWith(PREFIX)) return;
-  if (!message.guild) return message.reply('❌ Commands only work in a server, not DMs.').catch(() => {});
-
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/g);
-  const commandName = args.shift().toLowerCase();
-
-  const command = commands.get(commandName);
-  if (!command) {
-    return message.reply(`❓ Unknown command! Try \`${PREFIX}help\`.`);
-  }
-
   try {
-    await command.execute(message, args, client, PREFIX);
+    if (message.author.bot) return;
+    if (!message.guild) return;
+
+    const isPrefixed = message.content.startsWith('!!') || message.content.startsWith(PREFIX);
+
+    // Private AI session: plain text (no !ai needed)
+    if (!isPrefixed) {
+      const sess = getAISession(message.channel.id);
+      if (sess && message.content.trim()) {
+        const wait = onCooldown(message.author.id, 'ai');
+        if (wait > 0) return message.reply(`Slow down! **${wait}s**.`).catch(() => {});
+        const thinking = await message.reply('Thinking...').catch(() => null);
+        const r = await askAI(message.content.trim().slice(0, 1000), message.guild.id, message.author.id);
+        if (!r.ok) {
+          const err = r.needAuth ? `🔒 ${r.error}\nType \`/join <code>\` with a dashboard code to unlock.` : `⚠️ ${r.error}`;
+          if (thinking) return thinking.edit(err).catch(() => {});
+          return message.reply(err).catch(() => {});
+        }
+        let t = r.text;
+        if (t.length > 1900) t = t.slice(0, 1900) + '...';
+        if (thinking) return thinking.edit(t).catch(() => {});
+        return message.reply(t).catch(() => {});
+      }
+      return;
+    }
+
+    // Support both "!cmd" and "!!cmd" (so !!connect works even when PREFIX="!")
+    let usedPrefix = null;
+    let rest = '';
+    if (message.content.startsWith('!!')) {
+      usedPrefix = '!!';
+      rest = message.content.slice(2);
+    } else if (message.content.startsWith(PREFIX)) {
+      usedPrefix = PREFIX;
+      rest = message.content.slice(PREFIX.length);
+    } else {
+      return;
+    }
+    if (!rest.trim()) return;
+
+    const args = rest.trim().split(/ +/g);
+    const commandName = (args.shift() || '').toLowerCase().replace(/^!+/, '');
+    if (!commandName) return;
+
+    const command = commands.get(commandName);
+    if (!command) {
+      return message.reply(`Unknown command! Try \`${usedPrefix}help\`.`).catch(() => {});
+    }
+
+    const wait = onCooldown(message.author.id, commandName);
+    if (wait > 0) return message.reply(`Slow down! Try again in **${wait}s**.`).catch(() => {});
+
+    await command.execute(message, args, client, usedPrefix);
   } catch (err) {
-    console.error(err);
-    message.reply('⚠️ Something went wrong!');
+    console.error('[messageCreate]', err);
+    message.reply('Something went wrong!').catch(() => {});
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.on('interactionCreate', async interaction => {
+  try {
+    if (interaction.isAutocomplete()) {
+      await handleAutocomplete(interaction);
+      return;
+    }
+    if (interaction.isButton() && interaction.customId?.startsWith('ai_')) {
+      await handlePanelButton(interaction);
+      return;
+    }
+    if (interaction.isButton() && interaction.customId?.startsWith('mcp_')) {
+      await handleMcpButton(interaction);
+      return;
+    }
+    if (interaction.isModalSubmit() && interaction.customId?.startsWith('mcp_')) {
+      await handleMcpModal(interaction);
+      return;
+    }
+    if (interaction.isChatInputCommand()) {
+      await handleSlash(interaction);
+    }
+  } catch (e) {
+    console.error('[interaction]', e.message);
+    if (interaction.isRepliable?.() && !interaction.replied && !interaction.deferred) {
+      interaction.reply({ content: '⚠️ Something went wrong!', ephemeral: true }).catch(() => {});
+    }
+  }
+});
+
+client.login(process.env.DISCORD_TOKEN).catch(err => {
+  console.error('[fatal] login failed:', err.message);
+  process.exit(1);
+});
 
 startDashboard(client);

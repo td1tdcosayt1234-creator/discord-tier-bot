@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join Codes — Tier Bot Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/dashboard">Dashboard</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/ai">AI Chat</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <h2 class="page">🎟️ Join Codes</h2>
+  <p class="sub">Generate 8-digit codes here. Users type <code style="background:#2b2d31;padding:2px 8px;border-radius:6px">/join 12345678</code> in Discord to unlock AI. <b>Admin</b> codes also grant bot management.</p>
+
+  <div class="panel">
+    <h2 class="page" style="font-size:18px">➕ Generate code</h2>
+    <div class="row">
+      <input id="guild" placeholder="Server ID (empty = all servers)">
+      <input id="label" placeholder="Label (e.g. friends)" style="max-width:180px">
+      <select id="role" style="max-width:130px">
+        <option value="user">user</option>
+        <option value="admin">admin</option>
+      </select>
+    </div>
+    <div class="row">
+      <input id="maxUses" type="number" min="0" placeholder="Max uses (0 = unlimited)" style="max-width:200px">
+      <input id="expHours" type="number" min="0" placeholder="Expires in hours (0 = never)" style="max-width:200px">
+      <button class="action" onclick="gen()">Generate</button>
+    </div>
+    <div class="hint">User codes unlock AI. Admin codes unlock AI + tier/connect/MCP management (same as mods).</div>
+    <div class="err" id="err"></div>
+    <div id="newCode" class="big-code" style="margin-top:8px" title="Click to copy"></div>
+  </div>
+
+  <div class="panel">
+    <h2 class="page" style="font-size:18px">📋 Codes</h2>
+    <div class="row">
+      <input id="filterGuild" placeholder="Filter by Server ID (empty = all)">
+      <button class="action" onclick="load()">Load</button>
+    </div>
+    <div id="codes"></div>
+  </div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function showErr(m) { $('err').textContent = m || ''; }
+
+  async function gen() {
+    showErr('');
+    $('newCode').textContent = '';
+  $('newCode').onclick = null;
+    const body = {
+      guild: $('guild').value.trim(),
+      label: $('label').value.trim(),
+      role: $('role').value,
+      maxUses: Number($('maxUses').value) || 0,
+      expiresHours: Number($('expHours').value) || 0,
+    };
+    try {
+      const r = await fetch('/api/codes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (d.error) return showErr(d.error);
+      $('newCode').textContent = d.code;
+      $('newCode').onclick = () => { try { navigator.clipboard.writeText(d.code); showErr('Copied to clipboard!'); setTimeout(() => showErr(''), 2000); } catch {} };
+      load();
+    } catch { showErr('Failed!'); }
+  }
+
+  async function load() {
+    const g = $('filterGuild').value.trim();
+    try {
+      const r = await fetch('/api/codes' + (g ? '?guild=' + encodeURIComponent(g) : ''));
+      if (r.status === 401) { location.href = '/login'; return; }
+      const d = await r.json();
+      if (d.error) return showErr(d.error);
+      const box = $('codes');
+      box.innerHTML = '';
+      if (!d.codes.length) { box.innerHTML = '<div class="empty">No codes yet.</div>'; return; }
+      d.codes.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'player';
+        const exp = c.expires_at ? new Date(c.expires_at).toLocaleString() : 'never';
+        const left = c.max_uses ? `${c.uses}/${c.max_uses}` : `${c.uses}/∞`;
+        div.innerHTML = `<div class="ava">${c.role === 'admin' ? '👑' : '🎟️'}</div><span><b style="letter-spacing:2px">${esc(c.code)}</b> · ${esc(c.role)} · ${esc(c.label || 'no label')} · used ${left} · exp ${esc(exp)}${c.revoked ? ' · REVOKED' : ''}</span>`;
+        if (!c.revoked) {
+          const del = document.createElement('button');
+          del.className = 'action danger';
+          del.textContent = 'Revoke';
+          del.onclick = async () => {
+            await fetch('/api/codes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c.code }) });
+            load();
+          };
+          div.appendChild(del);
+        }
+        box.appendChild(div);
+      });
+    } catch { showErr('Load failed!'); }
+  }
+
+  load();
+</script>
+</body>
+</html>

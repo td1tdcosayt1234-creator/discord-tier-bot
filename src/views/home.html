@@ -8,9 +8,11 @@
 </head>
 <body>
 <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
 <nav>
   <span class="logo">🤖 TierBot</span>
   <a data-page href="/">Home</a>
+  <a data-page href="/dashboard">Dashboard</a>
   <a data-page href="/tiers">Tier List</a>
   <a data-page href="/ai">AI Chat</a>
   <a data-page href="/commands">Commands</a>
@@ -19,16 +21,20 @@
 </nav>
 <main>
   <div class="hero">
-    <div class="badge">🟢 BOT ONLINE</div>
-    <h1>Team Dhurbin Ete<br>Tier List Bot</h1>
-    <p>Rank players, set custom tier emojis, ask free AI — all from Discord or this panel.</p>
+    <div class="badge"><i></i>BOT ONLINE</div>
+    <h1>Team Dhurbin Ete Tier List Bot</h1>
+    <p>Rank players, set custom tier emojis, ask AI — from Discord or this panel.</p>
     <div class="cta">
       <a class="btn" href="/tiers">Open Tier List</a>
       <a class="btn ghost" href="/commands">View Commands</a>
     </div>
   </div>
 
-  <div class="marquee"><span>🏆 RANK PLAYERS &nbsp;•&nbsp; 👑 CUSTOM TIER EMOJIS &nbsp;•&nbsp; 🤖 FREE AI &nbsp;•&nbsp; 🌐 LIVE WEB PANEL &nbsp;•&nbsp; 💾 SQLITE DATABASE &nbsp;•&nbsp; 🏆 RANK PLAYERS &nbsp;•&nbsp; 👑 CUSTOM TIER EMOJIS &nbsp;•&nbsp; 🤖 FREE AI &nbsp;•&nbsp; 🌐 LIVE WEB PANEL &nbsp;•&nbsp; 💾 SQLITE DATABASE &nbsp;•&nbsp;</span></div>
+  <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
+
+  <div id="pubWrap" style="display:none;text-align:center;margin:4px 0 2px">
+    <span class="hint" style="margin:0 8px 0 0">🌐 Public URL:</span><a id="pubLink" class="btn ghost" style="padding:7px 16px;font-size:13px" href="#" target="_blank" rel="noopener"></a>
+  </div>
 
   <div class="stats">
     <div class="stat"><div class="num" id="stServers">–</div><div class="lbl">Servers</div></div>
@@ -46,7 +52,20 @@
 </main>
 <script src="/nav.js"></script>
 <script>
+  (function () {
+    const items = ['RANK PLAYERS', 'CUSTOM TIER EMOJIS', 'PRIVATE AI CHATS', 'OAUTH LOGIN', 'MCP SERVERS', 'JOIN CODES', 'LIVE WEB PANEL'];
+    const half = items.map(t => `<span>✦ ${t}</span>`).join('');
+    document.getElementById('tickerTrack').innerHTML = half + half;
+  })();
   (async function () {
+    try {
+      const u = await (await fetch('/api/public-url')).json();
+      if (u.url) {
+        const a = document.getElementById('pubLink');
+        a.href = u.url; a.textContent = u.url.replace(/^https?:\/\//, '');
+        document.getElementById('pubWrap').style.display = 'block';
+      }
+    } catch { /* offline */ }
     try {
       const h = await (await fetch('/api/health')).json();
       animateNum('stServers', h.guilds || 0, '');

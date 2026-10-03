@@ -4,7 +4,7 @@ import { EIGHT_BALL_RESPONSES } from '../data.js';
 export default {
   name: '8ball',
   execute(message, args, client, PREFIX) {
-    const question = args.join(' ');
+    const question = args.join(' ').trim().slice(0, 500);
     if (!question) return message.reply(`🎱 Please ask a question! Example: \`${PREFIX}8ball Will it rain?\``);
     const answer = EIGHT_BALL_RESPONSES[Math.floor(Math.random() * EIGHT_BALL_RESPONSES.length)];
     const embed = new EmbedBuilder()

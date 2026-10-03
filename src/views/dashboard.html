@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Tier Bot</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .dash-hero { text-align: left; padding: 10px 4px 20px; animation: fadeUp .5s ease both; }
+  .dash-hero .live-badge {
+    display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 800; letter-spacing: 1.5px;
+    background: rgba(35, 208, 127, .08); border: 1px solid rgba(35, 208, 127, .4); color: #3fd97c; margin-bottom: 12px;
+  }
+  .dash-hero .live-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fd97c; box-shadow: 0 0 10px #3fd97c; animation: dotPulse 1.8s infinite; }
+  .dash-hero h1 {
+    font-size: clamp(30px, 5vw, 44px); font-weight: 900; letter-spacing: -1px;
+    background: linear-gradient(92deg, #fff 15%, #a5b4fc 50%, #f0abfc 80%);
+    background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shine 7s linear infinite;
+  }
+  .dash-hero p { color: var(--muted); margin-top: 8px; font-size: 14.5px; }
+  .guild-bar {
+    display: flex; gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 16px; animation: fadeUp .5s ease both;
+  }
+  .guild-bar .g-ico {
+    width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+    box-shadow: 0 5px 16px rgba(88, 101, 242, .45);
+  }
+  .guild-bar input { flex: 1; border-radius: 10px; }
+  .dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .dstat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 15px;
+    padding: 18px 16px; display: flex; align-items: center; gap: 14px;
+    animation: fadeUp .5s ease both; transition: transform .18s, border-color .18s;
+  }
+  .dstat:hover { transform: translateY(-3px); border-color: rgba(88, 101, 242, .5); }
+  .dstat .di {
+    width: 44px; height: 44px; border-radius: 13px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 21px;
+    background: rgba(88, 101, 242, .13); border: 1px solid rgba(88, 101, 242, .35);
+  }
+  .dstat .dn { font-size: 24px; font-weight: 900; color: #fff; line-height: 1.1; }
+  .dstat .dl { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .mcard {
+    display: flex; gap: 14px; align-items: flex-start; text-decoration: none; color: inherit;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 15px; padding: 20px;
+    animation: fadeUp .5s ease both; transition: transform .2s, border-color .2s, box-shadow .2s; position: relative; overflow: hidden;
+  }
+  .mcard::after {
+    content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity .25s; pointer-events: none;
+    background: radial-gradient(380px 110px at 50% -30px, rgba(88, 101, 242, .2), transparent 70%);
+  }
+  .mcard:hover { transform: translateY(-4px); border-color: rgba(88, 101, 242, .55); box-shadow: 0 14px 36px rgba(0, 0, 0, .45); }
+  .mcard:hover::after { opacity: 1; }
+  .mcard .mi {
+    width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 23px;
+    background: linear-gradient(135deg, rgba(88,101,242,.25), rgba(235,69,158,.18));
+    border: 1px solid rgba(88, 101, 242, .35);
+  }
+  .mcard h3 { color: #fff; font-size: 16px; margin-bottom: 4px; }
+  .mcard h3 .go { color: var(--accent-2); transition: margin .2s; }
+  .mcard:hover h3 .go { margin-left: 5px; }
+  .mcard p { color: var(--muted); font-size: 13px; line-height: 1.55; }
+  .sec-title { color: #fff; font-size: 15px; font-weight: 800; letter-spacing: .4px; margin: 22px 0 12px 2px; }
+  @media (max-width: 560px) { .guild-bar { flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/dashboard">Dashboard</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/ai">AI Chat</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <div class="dash-hero">
+    <div class="live-badge"><i></i>CONTROL CENTER</div>
+    <h1>Dashboard</h1>
+    <p>Every stat and shortcut in one place. Enter a Server ID for server details.</p>
+  </div>
+
+  <div class="guild-bar">
+    <div class="g-ico">🖥️</div>
+    <input id="guild" placeholder="Server ID — right-click server → Copy Server ID">
+    <button class="action" onclick="load()">Load</button>
+  </div>
+  <div class="err" id="err"></div>
+
+  <div class="dash-stats">
+    <div class="dstat"><div class="di">🤖</div><div><div class="dn" id="dBot">–</div><div class="dl">Bot</div></div></div>
+    <div class="dstat"><div class="di">🌐</div><div><div class="dn" id="dServers">–</div><div class="dl">Servers</div></div></div>
+    <div class="dstat"><div class="di">⏱️</div><div><div class="dn" id="dUptime">–</div><div class="dl">Uptime</div></div></div>
+    <div class="dstat"><div class="di">🔒</div><div><div class="dn" id="dGate">–</div><div class="dl">Code Gate</div></div></div>
+  </div>
+
+  <div class="sec-title">Manage</div>
+  <div class="mgrid">
+    <a class="mcard" href="/tiers"><div class="mi">🏆</div><div><h3>Tier List <span class="go">→</span></h3><p id="cTiers">—</p></div></a>
+    <a class="mcard" href="/ai"><div class="mi">🤖</div><div><h3>AI Chat <span class="go">→</span></h3><p id="cAI">—</p></div></a>
+    <a class="mcard" href="#codes"><div class="mi">🎟️</div><div><h3>Join Codes <span class="go">↓</span></h3><p id="cCodes">—</p></div></a>
+    <a class="mcard" href="/commands"><div class="mi">🔌</div><div><h3>MCP / Commands <span class="go">→</span></h3><p id="cMCP">—</p></div></a>
+  </div>
+
+  <div class="sec-title" id="codes">🎟️ Join Codes</div>
+  <p class="sub">Generate 8-digit codes here. Users type <code style="background:#26272f;padding:2px 8px;border-radius:6px">/join 12345678</code> in Discord. <b>Admin</b> codes also grant bot management.</p>
+  <div class="panel">
+    <div class="row">
+      <input id="cdLabel" placeholder="Label (e.g. friends)" style="max-width:190px">
+      <select id="cdRole" style="max-width:130px">
+        <option value="user">user</option>
+        <option value="admin">admin</option>
+      </select>
+      <input id="cdMax" type="number" min="0" placeholder="Max uses (0 = ∞)" style="max-width:170px">
+      <input id="cdExp" type="number" min="0" placeholder="Expires hrs (0 = never)" style="max-width:180px">
+      <button class="action" onclick="genCode()">Generate</button>
+    </div>
+    <div class="hint">Leave Server ID empty for a global code, or type one above to lock it to a server. User codes unlock AI.</div>
+    <div class="err" id="cdErr"></div>
+    <div id="cdNew" class="big-code" title="Click to copy"></div>
+  </div>
+  <div class="panel">
+    <div class="row">
+      <button class="action" onclick="loadCodes()">↻ Refresh list</button>
+    </div>
+    <div id="cdList"></div>
+  </div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  async function load() {
+    $('err').textContent = '';
+    const g = $('guild').value.trim();
+    if (g) localStorage.setItem('guild', g);
+    try {
+      const r = await fetch('/api/overview' + (g ? '?guild=' + encodeURIComponent(g) : ''));
+      if (r.status === 401) { location.href = '/login'; return; }
+      const d = await r.json();
+      if (d.error) { $('err').textContent = d.error; return; }
+      $('dBot').textContent = d.online ? '● Online' : '● Offline';
+      $('dBot').style.color = d.online ? '#3fd97c' : '#fa777c';
+      $('dBot').style.fontSize = '19px';
+      $('dServers').textContent = d.guilds;
+      const s = d.uptimeSec || 0;
+      $('dUptime').textContent = s > 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.floor(s / 60) + 'm';
+      $('dGate').textContent = d.codeGate ? '🔒 On' : '🔓 Off';
+      $('cCodes').textContent = `${d.codes.active} active of ${d.codes.total} total codes.`;
+      if (d.tiers) $('cTiers').textContent = `${d.tiers.playerCount} players across ${d.tiers.tierCount} tiers · ${d.tiers.name}.`;
+      else $('cTiers').textContent = 'Enter a Server ID above for tier stats.';
+      if (d.ai) $('cAI').textContent = `${d.ai.mode}${d.ai.provider ? ' · ' + d.ai.provider : ''}${d.ai.model ? ' · ' + d.ai.model : ''}.`;
+      else $('cAI').textContent = 'Enter a Server ID above for AI mode.';
+      if (d.mcp) $('cMCP').textContent = d.mcp.length ? `Connected: ${d.mcp.join(', ')}.` : 'No MCP servers on this server.';
+      else $('cMCP').textContent = 'Enter a Server ID above for MCP servers.';
+    } catch { $('err').textContent = 'Load failed!'; }
+  }
+
+  $('guild').value = localStorage.getItem('guild') || '';
+  $('guild').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+  load();
+  loadCodes();
+
+  async function genCode() {
+    $('cdErr').textContent = '';
+    $('cdNew').textContent = '';
+    $('cdNew').onclick = null;
+    const body = {
+      guild: $('guild').value.trim(),
+      label: $('cdLabel').value.trim(),
+      role: $('cdRole').value,
+      maxUses: Number($('cdMax').value) || 0,
+      expiresHours: Number($('cdExp').value) || 0,
+    };
+    try {
+      const r = await fetch('/api/codes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (r.status === 401) { location.href = '/login'; return; }
+      const d = await r.json();
+      if (d.error) { $('cdErr').textContent = d.error; return; }
+      $('cdNew').textContent = d.code;
+      $('cdNew').onclick = () => {
+        try { navigator.clipboard.writeText(d.code); $('cdErr').textContent = 'Copied to clipboard!'; setTimeout(() => $('cdErr').textContent = '', 2000); } catch {}
+      };
+      loadCodes();
+      load();
+    } catch { $('cdErr').textContent = 'Failed!'; }
+  }
+
+  async function loadCodes() {
+    try {
+      const r = await fetch('/api/codes');
+      if (r.status === 401) { location.href = '/login'; return; }
+      const d = await r.json();
+      if (d.error) { $('cdErr').textContent = d.error; return; }
+      const box = $('cdList');
+      box.innerHTML = '';
+      if (!d.codes.length) { box.innerHTML = '<div class="empty">No codes yet — generate one above.</div>'; return; }
+      d.codes.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'player';
+        const exp = c.expires_at ? new Date(c.expires_at).toLocaleString() : 'never';
+        const left = c.max_uses ? `${c.uses}/${c.max_uses}` : `${c.uses}/∞`;
+        div.innerHTML = `<div class="ava">${c.role === 'admin' ? '👑' : '🎟️'}</div><span><b style="letter-spacing:2px">${esc(c.code)}</b> · ${esc(c.role)} · ${esc(c.label || 'no label')} · used ${left} · exp ${esc(exp)}${c.revoked ? ' · REVOKED' : ''}</span>`;
+        if (!c.revoked) {
+          const del = document.createElement('button');
+          del.className = 'action danger';
+          del.textContent = 'Revoke';
+          del.onclick = async () => {
+            await fetch('/api/codes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c.code }) });
+            loadCodes();
+            load();
+          };
+          div.appendChild(del);
+        }
+        box.appendChild(div);
+      });
+    } catch { $('cdErr').textContent = 'Load failed!'; }
+  }
+</script>
+</body>
+</html>

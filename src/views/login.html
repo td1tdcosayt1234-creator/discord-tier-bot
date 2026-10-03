@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — Tier Bot Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .login-wrap { min-height: calc(100vh - 60px); display: flex; align-items: center; justify-content: center; padding: 32px 16px; position: relative; z-index: 1; }
+  .login-card {
+    width: 100%; max-width: 380px; padding: 34px 32px 26px; border-radius: 18px;
+    background: rgba(23, 24, 30, .9); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, .08);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+    animation: rise .5s ease both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .brand-mark {
+    width: 44px; height: 44px; border-radius: 13px; flex-shrink: 0;
+    background: linear-gradient(135deg, #5865f2, #7b5cf0);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+    box-shadow: 0 6px 18px rgba(88, 101, 242, .45);
+  }
+  .brand h1 { font-size: 20px; font-weight: 800; color: #fff; }
+  .brand p { font-size: 12.5px; color: #949ba4; margin-top: 2px; }
+  label.lbl { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .8px; color: #949ba4; margin: 0 0 7px 2px; }
+  .field { position: relative; margin-bottom: 16px; }
+  .field input {
+    width: 100%; padding: 12px 44px 12px 14px; border-radius: 10px; font-size: 15px;
+    background: #14151b; border: 1px solid #2c2f3a; color: #fff; outline: none; transition: border-color .18s, box-shadow .18s;
+  }
+  .field input:focus { border-color: #5865f2; box-shadow: 0 0 0 3px rgba(88, 101, 242, .25); }
+  .field button.eye {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; font-size: 16px; opacity: .55; padding: 6px;
+  }
+  .field button.eye:hover { opacity: 1; }
+  .primary-btn {
+    width: 100%; padding: 12px; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 700; cursor: pointer; color: #fff;
+    background: linear-gradient(135deg, #5865f2, #7b5cf0); transition: filter .18s, transform .18s;
+  }
+  .primary-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .primary-btn:disabled { opacity: .6; cursor: wait; transform: none; }
+  .divider { display: flex; align-items: center; gap: 12px; color: #5c6069; font-size: 11.5px; font-weight: 700; margin: 20px 0 14px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #2c2f3a; }
+  .dc-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+    padding: 12px; border-radius: 10px; font-size: 15px; font-weight: 700; text-decoration: none;
+    background: #5865f2; color: #fff; transition: background .18s, transform .18s;
+  }
+  .dc-btn:hover { background: #4752c4; transform: translateY(-1px); }
+  .dc-btn img { width: 22px; height: 22px; }
+  .g-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+    padding: 12px; border-radius: 10px; font-size: 15px; font-weight: 700; text-decoration: none;
+    background: #fff; color: #1f1f1f; transition: transform .18s, box-shadow .18s; margin-top: 10px;
+  }
+  .g-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(255, 255, 255, .25); }
+  .g-btn img { width: 20px; height: 20px; }
+  .login-err { min-height: 20px; color: #fa777c; font-size: 13px; font-weight: 600; margin-top: 12px; text-align: center; }
+  .shake { animation: shake .35s ease; }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-7px); } 75% { transform: translateX(7px); } }
+  .login-foot { margin-top: 18px; text-align: center; font-size: 11.5px; color: #5c6069; }
+  @media (max-width: 440px) { .login-card { padding: 28px 22px 22px; } }
+</style>
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <span class="dot" id="navDot"></span>
+</nav>
+<div class="login-wrap">
+  <div class="login-card" id="card">
+    <div class="brand">
+      <div class="brand-mark">🤖</div>
+      <div>
+        <h1>Welcome back</h1>
+        <p>Log in to manage your bot</p>
+      </div>
+    </div>
+    <label class="lbl" for="user">USERNAME</label>
+    <div class="field"><input id="user" autocomplete="username" spellcheck="false"></div>
+    <label class="lbl" for="pass">PASSWORD</label>
+    <div class="field">
+      <input id="pass" type="password" autocomplete="current-password">
+      <button class="eye" id="eye" type="button" title="Show password">👁️</button>
+    </div>
+    <button class="primary-btn" id="go" onclick="login()">Log In</button>
+    <div class="divider">OR</div>
+    <a class="dc-btn" href="/api/discord-login"><img src="/discord.svg" alt="Discord logo">Continue with Discord</a>
+    <a class="g-btn" href="/api/google-login"><svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"/></svg>Continue with Google</a>
+    <div class="login-err" id="err"></div>
+    <p class="login-foot">🔒 Protected area · session lasts 7 days</p>
+  </div>
+</div>
+<script>
+  const card = document.getElementById('card');
+  document.getElementById('eye').onclick = () => {
+    const p = document.getElementById('pass');
+    p.type = p.type === 'password' ? 'text' : 'password';
+  };
+  async function login() {
+    const e = document.getElementById('err');
+    const btn = document.getElementById('go');
+    e.textContent = '';
+    const user = document.getElementById('user').value.trim();
+    const pass = document.getElementById('pass').value;
+    if (!user || !pass) {
+      e.textContent = 'Enter username and password.';
+      card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user, pass }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        e.textContent = d.error || 'Login failed.';
+        card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+        btn.disabled = false;
+        return;
+      }
+      location.href = '/';
+    } catch {
+      e.textContent = 'Connection failed.';
+      btn.disabled = false;
+    }
+  }
+  document.getElementById('pass').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  document.getElementById('user').focus();
+</script>
+</body>
+</html>
