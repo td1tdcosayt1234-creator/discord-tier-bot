@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace Files — Tier Bot</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/dash.css">
+<style>
+  .guild-bar { display: flex; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .guild-bar input { flex: 1; border-radius: 10px; }
+  .frow { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+  .frow code { flex: 1; color: #fff; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/dashboard">Dashboard</a>
+  <a data-page href="/activity">Tracking</a>
+  <a data-page href="/security">Security</a>
+  <a data-page href="/files">Files</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/ai">AI Chat</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <div class="dash-hero"><h1>📁 Workspace Files</h1><p>Files the coding agent created, per server. Download or delete (admin only).</p></div>
+  <div class="guild-bar">
+    <div class="g-ico">🖥️</div>
+    <input id="guild" placeholder="Server ID — right-click server → Copy Server ID">
+    <button class="action" onclick="load()">Load</button>
+  </div>
+  <div class="err" id="err"></div>
+  <div id="list"></div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const guild = () => ($('guild').value || '').trim();
+  $('guild').value = localStorage.getItem('guild') || '';
+  async function load() {
+    $('err').textContent = '';
+    const g = guild();
+    if (g) localStorage.setItem('guild', g);
+    const box = $('list');
+    box.innerHTML = '';
+    if (!g) { $('err').textContent = 'Enter a Server ID first!'; return; }
+    try {
+      const r = await fetch('/api/files?guild=' + encodeURIComponent(g));
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const d = await r.json();
+      if (d.error) { $('err').textContent = d.error; return; }
+      if (!d.files.length) { box.innerHTML = '<div class="empty">Workspace empty for this server.</div>'; return; }
+      d.files.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'frow';
+        div.innerHTML = `<span>📄</span><code>${esc(f)}</code>`;
+        const dl = document.createElement('a');
+        dl.className = 'action'; dl.textContent = 'Download'; dl.style.textDecoration = 'none';
+        dl.href = '/api/file-download?guild=' + encodeURIComponent(g) + '&path=' + encodeURIComponent(f);
+        const del = document.createElement('button');
+        del.className = 'action danger'; del.textContent = 'Delete';
+        del.onclick = async () => {
+          if (!confirm('Delete ' + f + '?')) return;
+          await fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guild: g, path: f }) });
+          load();
+        };
+        div.appendChild(dl); div.appendChild(del);
+        box.appendChild(div);
+      });
+    } catch { $('err').textContent = 'Load failed!'; }
+  }
+  if (guild()) load();
+</script>
+</body>
+</html>

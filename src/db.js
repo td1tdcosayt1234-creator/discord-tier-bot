@@ -106,6 +106,34 @@ db.exec(`
     created_at INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, user_id)
   );
+  CREATE TABLE IF NOT EXISTS ai_coding (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
+  );
+  CREATE TABLE IF NOT EXISTS security_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at INTEGER NOT NULL DEFAULT 0,
+    type TEXT NOT NULL DEFAULT 'audit',
+    user TEXT,
+    guild_id TEXT,
+    ip TEXT,
+    action TEXT NOT NULL,
+    detail TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_security_events_time ON security_events (created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events (action);
+  CREATE TABLE IF NOT EXISTS ai_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
+    content TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_history_user ON ai_history (guild_id, user_id, id DESC);
 `);
 try { db.exec('ALTER TABLE tiers ADD COLUMN emoji TEXT'); } catch { /* column already exists */ }
 try { db.exec('ALTER TABLE ai_config ADD COLUMN provider TEXT'); } catch { /* column already exists */ }
@@ -333,6 +361,12 @@ export function clearUserKey(guildId, userId) {
   return res.changes > 0;
 }
 
+export function setUserModel(guildId, userId, model) {
+  const res = db.prepare('UPDATE ai_user_keys SET model = ?, updated_at = ? WHERE guild_id = ? AND user_id = ?')
+    .run(String(model).slice(0, 120), Date.now(), guildId, userId);
+  return res.changes > 0;
+}
+
 // ---------- AI private sessions (panel -> private channel) ----------
 
 export function createAISession(channelId, guildId, userId) {
@@ -406,6 +440,154 @@ export function redeemJoinCode(rawCode, guildId, userId) {
 
 export function isBotAdmin(guildId, userId) {
   return !!db.prepare('SELECT 1 FROM bot_admins WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
+}
+
+// ---------- AI coding agent mode (per-user toggle, tools: files/zip/mcp only) ----------
+
+export function isCodingMode(guildId, userId) {
+  const row = db.prepare('SELECT enabled FROM ai_coding WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
+  return row?.enabled === 1;
+}
+
+// 'on' = always agent, 'off' = never tools, 'auto' (default, no row) = tools only when needed.
+export function getCodingPref(guildId, userId) {
+  const row = db.prepare('SELECT enabled FROM ai_coding WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
+  if (!row) return 'auto';
+  return row.enabled === 1 ? 'on' : 'off';
+}
+
+export function setCodingMode(guildId, userId, on) {
+  if (on === 'auto' || on === null) {
+    db.prepare('DELETE FROM ai_coding WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
+    return 'auto';
+  }
+  db.prepare(
+    'INSERT INTO ai_coding (guild_id, user_id, enabled, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at'
+  ).run(guildId, userId, on ? 1 : 0, Date.now());
+  return on ? 'on' : 'off';
+}
+
+// ---------- Personal join codes (dashboard members: 1 code per Discord user) ----------
+
+export function getPersonalJoinCode(discordId) {
+  const label = `member:${String(discordId || '').trim()}`;
+  return db.prepare('SELECT code, role, label, max_uses, uses, expires_at, revoked, created_at FROM join_codes WHERE label = ? AND revoked = 0 ORDER BY created_at DESC LIMIT 1').get(label) || null;
+}
+
+export function getOrCreatePersonalJoinCode(discordId) {
+  const id = String(discordId || '').trim();
+  if (!/^\d{5,25}$/.test(id)) return { ok: false, error: 'Invalid Discord account!' };
+  const existing = getPersonalJoinCode(id);
+  if (existing) {
+    if (existing.expires_at && existing.expires_at < Date.now()) {
+      revokeJoinCode(existing.code);
+    } else if (!(existing.max_uses > 0 && existing.uses >= existing.max_uses)) {
+      return { ok: true, code: existing.code, created: false };
+    }
+  }
+  const c = createJoinCode(null, 'user', `member:${id}`, 1, 0);
+  return { ok: true, code: c.code, created: true };
+}
+
+// ---------- Tracking + security events (dashboard audit, logins, blocks) ----------
+
+const EVENT_TYPES = new Set(['audit', 'login', 'ai', 'tier', 'code', 'mcp', 'coding', 'file', 'security']);
+let eventInserts = 0;
+
+export function trackEvent({ type = 'audit', user = null, guildId = null, ip = null, action, detail = null }) {
+  const t = EVENT_TYPES.has(String(type)) ? String(type) : 'audit';
+  const a = String(action || '').slice(0, 64);
+  if (!a) return null;
+  try {
+    const r = db.prepare(
+      'INSERT INTO security_events (created_at, type, user, guild_id, ip, action, detail) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(Date.now(), t, user ? String(user).slice(0, 100) : null, guildId ? String(guildId).slice(0, 32) : null,
+      ip ? String(ip).slice(0, 64) : null, a, detail ? String(detail).slice(0, 500) : null);
+    if (++eventInserts % 50 === 0) pruneEvents();
+    return Number(r.lastInsertRowid) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function pruneEvents() {
+  try {
+    db.prepare('DELETE FROM security_events WHERE created_at < ?').run(Date.now() - 30 * 24 * 3600 * 1000);
+    db.prepare('DELETE FROM security_events WHERE id NOT IN (SELECT id FROM security_events ORDER BY id DESC LIMIT 20000)').run();
+  } catch { /* ignore */ }
+}
+
+export function queryEvents({ type = null, action = null, user = null, guildId = null, since = 0, limit = 100, offset = 0 } = {}) {
+  const where = [];
+  const args = [];
+  if (type && EVENT_TYPES.has(String(type))) { where.push('type = ?'); args.push(String(type)); }
+  if (action) { where.push('action = ?'); args.push(String(action).slice(0, 64)); }
+  if (user) { where.push('user LIKE ?'); args.push(`%${String(user).slice(0, 50)}%`); }
+  if (guildId) { where.push('guild_id = ?'); args.push(String(guildId).slice(0, 32)); }
+  if (Number(since) > 0) { where.push('created_at >= ?'); args.push(Number(since)); }
+  const lim = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  const off = Math.max(Number(offset) || 0, 0);
+  const sql = `SELECT id, created_at, type, user, guild_id, ip, action, detail FROM security_events` +
+    (where.length ? ` WHERE ${where.join(' AND ')}` : '') + ` ORDER BY id DESC LIMIT ${lim} OFFSET ${off}`;
+  const rows = db.prepare(sql).all(...args);
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM security_events` + (where.length ? ` WHERE ${where.join(' AND ')}` : '')).get(...args)?.n || 0;
+  return { rows, total };
+}
+
+export function eventStats() {
+  try {
+    const total = db.prepare('SELECT COUNT(*) AS n FROM security_events').get()?.n || 0;
+    const day = db.prepare('SELECT COUNT(*) AS n FROM security_events WHERE created_at >= ?').get(Date.now() - 24 * 3600 * 1000)?.n || 0;
+    const fails = db.prepare(`SELECT COUNT(*) AS n FROM security_events WHERE action IN ('login-fail','login-blocked') AND created_at >= ?`).get(Date.now() - 24 * 3600 * 1000)?.n || 0;
+    const byType = db.prepare('SELECT type, COUNT(*) AS n FROM security_events WHERE created_at >= ? GROUP BY type').all(Date.now() - 24 * 3600 * 1000);
+    return { total, last24h: day, loginFails24h: fails, byType };
+  } catch {
+    return { total: 0, last24h: 0, loginFails24h: 0, byType: [] };
+  }
+}
+
+// ---------- Chat memory (per server + user, last exchanges) ----------
+
+const HISTORY_KEEP = 20; // rows kept per user (10 exchanges)
+const HISTORY_SEND = 8; // messages sent to the model (4 exchanges)
+export const HISTORY_CHARS = 1500; // stored chars per message
+
+export function getHistory(guildId, userId, limit = HISTORY_SEND) {
+  try {
+    const lim = Math.min(Math.max(Number(limit) || HISTORY_SEND, 1), 20);
+    const rows = db.prepare(
+      'SELECT role, content FROM ai_history WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT ?'
+    ).all(String(guildId), String(userId), lim);
+    return rows.reverse()
+      .filter(r => (r.role === 'user' || r.role === 'assistant') && r.content)
+      .map(r => ({ role: r.role, content: String(r.content) }));
+  } catch {
+    return [];
+  }
+}
+
+export function saveExchange(guildId, userId, userText, aiText) {
+  try {
+    const u = String(userText || '').slice(0, HISTORY_CHARS).trim();
+    const a = String(aiText || '').slice(0, HISTORY_CHARS).trim();
+    if (!u || !a) return;
+    const now = Date.now();
+    const ins = db.prepare('INSERT INTO ai_history (guild_id, user_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)');
+    ins.run(String(guildId), String(userId), 'user', u, now);
+    ins.run(String(guildId), String(userId), 'assistant', a, now);
+    db.prepare(
+      'DELETE FROM ai_history WHERE guild_id = ? AND user_id = ? AND id NOT IN (SELECT id FROM ai_history WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT ?)'
+    ).run(String(guildId), String(userId), String(guildId), String(userId), HISTORY_KEEP);
+  } catch { /* ignore */ }
+}
+
+export function clearHistory(guildId, userId) {
+  try {
+    const res = db.prepare('DELETE FROM ai_history WHERE guild_id = ? AND user_id = ?').run(String(guildId), String(userId));
+    return res.changes > 0;
+  } catch {
+    return false;
+  }
 }
 
 // ---------- MCP OAuth pending (Notion-style login, no token paste) ----------

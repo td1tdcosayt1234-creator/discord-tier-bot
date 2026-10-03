@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionsBitField } from 'discord.js';
 import { askAI, validateProviderInput, validateCustomInput, maskKey, isAuthRequired, AI_PROVIDERS } from './ai.js';
-import { createLogin, exchangeCode, startHFDevice, pollHFDevice, saveHFLogin, startGoogleLogin } from './oauth.js';
+import { createLogin, exchangeCode, startHFDevice, pollHFDevice, saveHFLogin, startGoogleLogin, startGitHubDevice, pollGitHubDevice, saveGitHubLogin } from './oauth.js';
 import { buildPanel, createSessionChannel } from './aiPanel.js';
 import { buildMcpPanel } from './mcpPanel.js';
 import { startMcpLogin } from './mcpAuth.js';
@@ -12,6 +12,7 @@ import {
   getAISession, deleteAISession, getUserSessions, isValidGuildId,
   upsertMcpServer, listMcpServers, getMcpServer, deleteMcpServer,
   createJoinCode, listJoinCodes, revokeJoinCode, redeemJoinCode, isBotAdmin,
+  getCodingPref, setCodingMode,
 } from './db.js';
 import { EIGHT_BALL_RESPONSES, JOKES } from './data.js';
 import { hasBadMentions } from './util.js';
@@ -45,21 +46,22 @@ export function slashDefs() {
   connect.addSubcommand(s => s.setName('status').setDescription('Show AI mode + your login'));
   connect.addSubcommand(s => s.setName('login').setDescription('Log in on site, no API key needed')
     .addStringOption(o => o.setName('provider').setDescription('Login provider').setRequired(false)
-      .addChoices({ name: 'openrouter', value: 'openrouter' }, { name: 'google', value: 'google' }, { name: 'huggingface', value: 'huggingface' })));
+      .addChoices({ name: 'openrouter', value: 'openrouter' }, { name: 'google', value: 'google' }, { name: 'huggingface', value: 'huggingface' }, { name: 'github', value: 'github' })));
   connect.addSubcommand(s => s.setName('code').setDescription('Paste login code').addStringOption(o => o.setName('code').setDescription('Code from site').setRequired(true)));
   connect.addSubcommand(s => s.setName('auth').setDescription('Unlock with owner code').addStringOption(o => o.setName('code').setDescription('Owner code').setRequired(true)));
   connect.addSubcommand(s => s.setName('logout').setDescription('Remove your login/auth'));
   connect.addSubcommand(s => s.setName('test').setDescription('Test current AI').addStringOption(o => o.setName('question').setDescription('Test text').setRequired(false)));
   connect.addSubcommand(s => s.setName('free').setDescription('Back to free AI (mods)'));
   connect.addSubcommand(s => s.setName('key').setDescription('Connect platform key (mods)')
-    .addStringOption(o => o.setName('provider').setDescription('gemini/openai/groq/openrouter/deepseek/huggingface/xai/cerebras/fireworks/together/mistral').setRequired(true))
+    .addStringOption(o => o.setName('provider').setDescription('Key provider: gemini, openai, groq, github-models, ...').setRequired(true))
     .addStringOption(o => o.setName('key').setDescription('API key').setRequired(true))
     .addStringOption(o => o.setName('model').setDescription('Model (default auto)').setRequired(false)));
   connect.addSubcommand(s => s.setName('api').setDescription('Custom base URL (mods)')
     .addStringOption(o => o.setName('base_url').setDescription('https://...').setRequired(true))
     .addStringOption(o => o.setName('key').setDescription('API key').setRequired(true))
     .addStringOption(o => o.setName('model').setDescription('Model').setRequired(false)));
-  connect.addSubcommand(s => s.setName('model').setDescription('Change model (mods)').addStringOption(o => o.setName('name').setDescription('Model name').setRequired(true)));
+  connect.addSubcommand(s => s.setName('model').setDescription('Change model (free list: type to search)').addStringOption(o => o.setName('name').setDescription('Pick a free OpenRouter model').setRequired(true).setAutocomplete(true)));
+  connect.addSubcommand(s => s.setName('models').setDescription('List free OpenRouter models').addStringOption(o => o.setName('search').setDescription('Filter by name').setRequired(false)));
 
   const tier = new SlashCommandBuilder().setName('tier').setDescription('Tier list');
   tier.addSubcommand(s => s.setName('show').setDescription('Show tier list'));
@@ -130,6 +132,30 @@ export async function registerSlash(client) {
 }
 
 async function aiAnswer(interaction, prompt) {
+  const cmd = String(prompt || '').trim().toLowerCase();
+  if (cmd === 'forget' || cmd === 'clear memory' || cmd === 'reset memory') {
+    const { clearHistory } = await import('./db.js');
+    const had = clearHistory(interaction.guildId, interaction.user.id);
+    return interaction.reply({ content: had ? '🧠 Memory cleared! I forgot our earlier chat on this server.' : '🧠 Nothing to forget — no saved chat on this server.', ephemeral: true }).catch(() => {});
+  }
+  if (/^coding\s+(on|enable|off|disable|auto|smart|default|status)$/.test(cmd)) {
+    const action = cmd.split(/\s+/)[1];
+    if (action === 'on' || action === 'enable') {
+      setCodingMode(interaction.guildId, interaction.user.id, true);
+      return interaction.reply({ content: '🤖 **Coding mode ON (always)!** `/ai` can use tools — file create/read/list, zip/unzip, MCP.\nNeeds an OpenAI-compatible login (`/connect login github` works, no key). Smart mode: `/ai coding auto`.', ephemeral: true }).catch(() => {});
+    }
+    if (action === 'off' || action === 'disable') {
+      setCodingMode(interaction.guildId, interaction.user.id, false);
+      return interaction.reply({ content: '🤖 **Coding mode OFF.** Tools disabled — normal chat only.', ephemeral: true }).catch(() => {});
+    }
+    if (action === 'auto' || action === 'smart' || action === 'default') {
+      setCodingMode(interaction.guildId, interaction.user.id, 'auto');
+      return interaction.reply({ content: '🤖 **Coding mode AUTO (default).** Normal chat — files are created ONLY when the task needs them.', ephemeral: true }).catch(() => {});
+    }
+    const pref = getCodingPref(interaction.guildId, interaction.user.id);
+    const label = pref === 'on' ? 'ON (always)' : pref === 'off' ? 'OFF' : 'AUTO (default: tools only when needed)';
+    return interaction.reply({ content: `🤖 Coding mode is **${label}**. Toggle: \`/ai coding on|auto|off\`.`, ephemeral: true }).catch(() => {});
+  }
   await interaction.deferReply().catch(() => {});
   const r = await askAI(prompt.slice(0, 1000), interaction.guildId, interaction.user.id);
   if (!r.ok) {
@@ -137,6 +163,9 @@ async function aiAnswer(interaction, prompt) {
     return interaction.editReply(err).catch(() => {});
   }
   let t = r.text + (r.customError ? `\n\n_(note: custom failed (${r.customError}), used free)_` : '');
+  if (r.mode === 'coding' && r.files?.length) {
+    t += `\n\n📁 Files: ${r.files.map(f => `\`${f}\``).join(', ')} — download: \`!get <path>\``;
+  }
   if (t.length > 1900) t = t.slice(0, 1900) + '...';
   return interaction.editReply(t).catch(() => {});
 }
@@ -257,6 +286,18 @@ export async function handleSlash(interaction) {
         }).catch(() => {});
         return;
       }
+      if (which === 'github' || which === 'gh') {
+        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        const d = await startGitHubDevice();
+        if (!d.ok) return interaction.editReply(`❌ ${d.error}`).catch(() => {});
+        await interaction.editReply(`🔑 **GitHub login**\n**1.** Open: ${d.url}\n**2.** Enter this code: \`${d.userCode}\`\n**3.** Authorize — I'll detect it automatically (waiting up to 5 min)...`).catch(() => {});
+        pollGitHubDevice(d.deviceCode, d.interval).then(r => {
+          if (!r.ok) return interaction.followUp({ content: `❌ GitHub login: ${r.error}`, ephemeral: true }).catch(() => {});
+          const model = saveGitHubLogin(gid, uid, r.token);
+          interaction.followUp({ content: `✅ Connected via **GitHub Models**! Model: \`${model}\``, ephemeral: true }).catch(() => {});
+        }).catch(() => {});
+        return;
+      }
       const { url } = createLogin(gid, uid);
       return interaction.reply({ content: `**1.** Open + log in:\n${url}\n**2.** Copy the code and paste it into \`/connect code\` (10 min)!`, ephemeral: true }).catch(() => {});
     }
@@ -277,7 +318,9 @@ export async function handleSlash(interaction) {
       return interaction.reply({ content: '✅ Connected! Use `/ai`.', ephemeral: true }).catch(() => {});
     }
     if (sub === 'logout') {
+      const { clearHistory } = await import('./db.js');
       const a = revokeUser(gid, uid), b = clearUserKey(gid, uid);
+      clearHistory(gid, uid);
       return interaction.reply({ content: a || b ? '👋 Logged out.' : 'ℹ️ Not connected.', ephemeral: true }).catch(() => {});
     }
     if (sub === 'test') {
@@ -296,9 +339,25 @@ export async function handleSlash(interaction) {
       return interaction.reply({ content: '✅ Free mode.', ephemeral: true }).catch(() => {});
     }
     if (sub === 'model') {
+      const name = interaction.options.getString('name', true);
+      const { isValidModelName } = await import('./models.js');
+      const clean = isValidModelName(name);
+      if (!clean) return interaction.reply({ content: '❌ Invalid model name! Pick one from `/connect models`.', ephemeral: true }).catch(() => {});
+      if (getUserKey(gid, uid)?.api_key) {
+        const { setUserModel } = await import('./db.js');
+        setUserModel(gid, uid, clean);
+        return interaction.reply({ content: `✅ Your model set to \`${clean}\``, ephemeral: true }).catch(() => {});
+      }
       if (!modOnly(interaction)) return;
-      const ok = setAIModel(gid, interaction.options.getString('name', true).slice(0, 120));
+      const ok = setAIModel(gid, clean);
       return interaction.reply({ content: ok ? '✅ Model set.' : '⚠️ No custom AI yet!', ephemeral: true }).catch(() => {});
+    }
+    if (sub === 'models') {
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
+      const { formatFreeModels } = await import('./models.js');
+      const f = await formatFreeModels(interaction.options.getString('search') || '', 15);
+      const body = f.lines.length ? f.lines.join('\n') : 'No matches! Try another search.';
+      return interaction.editReply(`🆓 **Free OpenRouter models** (${f.total} found${f.live ? '' : ', cached list — API offline'}):\n${body}\n\nSet one: \`/connect model <pick from the dropdown>\``.slice(0, 1900)).catch(() => {});
     }
     if (sub === 'key' || sub === 'api') {
       if (!modOnly(interaction)) return;
@@ -440,11 +499,17 @@ export async function handleSlash(interaction) {
 
 function gid0(i) { return i.guildId; }
 
-// Saved MCP server names as dropdown (autocomplete) — no need to type the name, just select
+// Autocomplete: saved MCP server names + free OpenRouter models for /connect model
 export async function handleAutocomplete(interaction) {
   try {
+    if (interaction.commandName === 'connect') {
+      const focused = interaction.options.getFocused(true);
+      if (focused.name !== 'name') return interaction.respond([]);
+      const { searchFreeModels } = await import('./models.js');
+      await interaction.respond(await searchFreeModels(focused.value || '', 25));
+      return;
+    }
     if (interaction.commandName !== 'mcp') return interaction.respond([]);
-    const focused = interaction.options.getFocused(true);
     if (focused.name !== 'name' && focused.name !== 'server') return interaction.respond([]);
     const q = String(focused.value || '').toLowerCase();
     const rows = listMcpServers(interaction.guildId)

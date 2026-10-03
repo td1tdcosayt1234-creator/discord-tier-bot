@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security — Tier Bot</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/dash.css">
+<style>
+  .check { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .chk { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; padding: 14px 16px; font-size: 13.5px; }
+  .chk b { color: #fff; display: block; margin-bottom: 3px; }
+  .ok { color: #3fd97c; } .bad { color: #fa777c; } .warn { color: #f0abfc; }
+  .blk { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+  .blk code { flex: 1; }
+</style>
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/dashboard">Dashboard</a>
+  <a data-page href="/activity">Tracking</a>
+  <a data-page href="/security">Security</a>
+  <a data-page href="/files">Files</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/ai">AI Chat</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <div class="dash-hero"><h1>🛡️ Security</h1><p>Posture checklist, brute-force blocks, event stats. Values shown are pass/fail only — never secrets.</p></div>
+  <div class="sec-title">Posture checklist</div>
+  <div class="check" id="checks"></div>
+  <div class="sec-title">Stats (24h)</div>
+  <div class="dash-stats" id="stats"></div>
+  <div class="sec-title">Blocked IPs / accounts</div>
+  <p class="hint">10 fails/30min → IP blocked 30min · 5 fails/15min → account cooled 15min · 5 tries/5min → login 429.</p>
+  <div class="err" id="err"></div>
+  <div id="blocks"></div>
+  <div class="row" style="margin-top:10px"><button class="action danger" onclick="unblockAll()">Unblock everything</button></div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const CHECKS = [
+    ['adminAuth', 'Admin login enabled', 'Set ADMIN_USER + ADMIN_PASS to require login.'],
+    ['defaultCreds', 'Default credentials CHANGED', 'admin / change_this_password must NOT be in use.', true],
+    ['sessionSecretSet', 'SESSION_SECRET set', 'Long random secret signs sessions + encrypts keys.'],
+    ['dashboardKeyChanged', 'DASHBOARD_KEY changed', 'Web-edit key must not be the default.'],
+    ['dashboardHttps', 'Dashboard HTTPS', 'DASHBOARD_URL should be https (tunnel URL).'],
+    ['discordOAuth', 'Discord OAuth configured', 'Needed for member logins + join codes.'],
+    ['trustProxy', 'Real-IP behind tunnel', 'CF-Connecting-IP is trusted for bans + audit.'],
+    ['joinGate', 'Join-code gate on', 'REQUIRE_JOIN_CODE or AI_AUTH_CODE set.'],
+  ];
+  async function load() {
+    try {
+      const r = await fetch('/api/security');
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const d = await r.json();
+      if (d.error) { $('err').textContent = d.error; return; }
+      const c = d.checklist || {};
+      $('checks').innerHTML = CHECKS.map(([k, label, hint, invert]) => {
+        const pass = invert ? !c[k] : !!c[k];
+        return `<div class="chk"><b>${pass ? '<span class="ok">✅</span>' : '<span class="bad">❌</span>'} ${esc(label)}</b><span class="hint">${esc(hint)}</span></div>`;
+      }).join('');
+      const s = d.stats || {};
+      $('stats').innerHTML =
+        `<div class="dstat"><div><div class="dn">${s.total ?? '–'}</div><div class="dl">Events total</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.last24h ?? '–'}</div><div class="dl">Events 24h</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.loginFails24h ?? '–'}</div><div class="dl">Login fails 24h</div></div></div>`;
+      const box = $('blocks');
+      box.innerHTML = '';
+      const bl = d.blocks || { ips: [], users: [] };
+      if (!bl.ips.length && !bl.users.length) { box.innerHTML = '<div class="empty">Nothing blocked right now.</div>'; return; }
+      bl.ips.forEach(b => {
+        const div = document.createElement('div');
+        div.className = 'blk';
+        div.innerHTML = `<span>🚫 IP</span><code>${esc(b.ip)} (${b.fails} fails)</code>`;
+        const btn = document.createElement('button');
+        btn.className = 'action'; btn.textContent = 'Unblock';
+        btn.onclick = () => unblock({ ip: b.ip });
+        div.appendChild(btn);
+        box.appendChild(div);
+      });
+      bl.users.forEach(b => {
+        const div = document.createElement('div');
+        div.className = 'blk';
+        div.innerHTML = `<span>🚫 Account</span><code>${esc(b.user)} (${b.fails} fails)</code>`;
+        const btn = document.createElement('button');
+        btn.className = 'action'; btn.textContent = 'Unblock';
+        btn.onclick = () => unblock({ user: b.user });
+        div.appendChild(btn);
+        box.appendChild(div);
+      });
+    } catch { $('err').textContent = 'Load failed!'; }
+  }
+  async function unblock(body) {
+    await fetch('/api/unblock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
+    load();
+  }
+  async function unblockAll() {
+    if (!confirm('Unblock all IPs + accounts?')) return;
+    await unblock({ all: true });
+  }
+  load();
+</script>
+</body>
+</html>

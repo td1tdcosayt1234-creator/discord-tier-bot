@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Tracking — Tier Bot</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/dash.css">
+<style>
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .filter-bar input, .filter-bar select { border-radius: 10px; min-width: 130px; flex: 1; }
+  .ev { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; }
+  .ev .meta { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+  .ev b.act { color: #fff; }
+  .tag { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; letter-spacing: .6px; margin-right: 6px; }
+  .t-login { background: rgba(88,101,242,.15); color: #a5b4fc; }
+  .t-ai { background: rgba(53,208,127,.12); color: #3fd97c; }
+  .t-security { background: rgba(250,119,124,.14); color: #fa777c; }
+  .t-tier { background: rgba(240,171,252,.13); color: #f0abfc; }
+  .t-code, .t-coding, .t-mcp, .t-file, .t-audit { background: rgba(255,255,255,.07); color: #c9cdd3; }
+  .pager { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+</style>
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/dashboard">Dashboard</a>
+  <a data-page href="/activity">Tracking</a>
+  <a data-page href="/security">Security</a>
+  <a data-page href="/files">Files</a>
+  <a data-page href="/tiers">Tier List</a>
+  <a data-page href="/ai">AI Chat</a>
+  <a data-page href="/commands">Commands</a>
+  <a data-page href="/status">Status</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <div class="dash-hero"><h1>📊 Activity Tracking</h1><p>Every login, AI use, tier change, code, MCP, file and block — 30 days, newest first.</p></div>
+  <div class="dash-stats" id="stats"></div>
+  <div class="filter-bar">
+    <select id="fType">
+      <option value="">all types</option>
+      <option value="login">login</option><option value="ai">ai</option>
+      <option value="tier">tier</option><option value="code">code</option>
+      <option value="mcp">mcp</option><option value="coding">coding</option>
+      <option value="file">file</option><option value="security">security</option>
+      <option value="audit">audit</option>
+    </select>
+    <input id="fAction" placeholder="action (e.g. login-fail)">
+    <input id="fUser" placeholder="user contains...">
+    <input id="fGuild" placeholder="Server ID">
+    <select id="fDays"><option value="1">last 24h</option><option value="7" selected>last 7d</option><option value="30">last 30d</option></select>
+    <button class="action" onclick="load(0)">Filter</button>
+  </div>
+  <div class="err" id="err"></div>
+  <div id="list"></div>
+  <div class="pager">
+    <button class="action" id="prevBtn" onclick="page(-1)">← Newer</button>
+    <span class="hint" id="pageInfo"></span>
+    <button class="action" id="nextBtn" onclick="page(1)">Older →</button>
+  </div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let offset = 0;
+  const LIM = 50;
+  function q() {
+    const p = new URLSearchParams({ days: $('fDays').value, limit: LIM, offset });
+    if ($('fType').value) p.set('type', $('fType').value);
+    if ($('fAction').value.trim()) p.set('action', $('fAction').value.trim());
+    if ($('fUser').value.trim()) p.set('user', $('fUser').value.trim());
+    if ($('fGuild').value.trim()) p.set('guild', $('fGuild').value.trim());
+    return p.toString();
+  }
+  async function load(off) {
+    offset = Math.max(0, off);
+    $('err').textContent = '';
+    try {
+      const r = await fetch('/api/events?' + q());
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const d = await r.json();
+      if (d.error) { $('err').textContent = d.error; return; }
+      const s = d.stats || {};
+      $('stats').innerHTML =
+        `<div class="dstat"><div><div class="dn">${s.total ?? '–'}</div><div class="dl">Total events</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.last24h ?? '–'}</div><div class="dl">Last 24h</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.loginFails24h ?? '–'}</div><div class="dl">Login fails 24h</div></div></div>`;
+      const box = $('list');
+      box.innerHTML = '';
+      if (!d.rows.length) { box.innerHTML = '<div class="empty">No events match.</div>'; }
+      d.rows.forEach(e => {
+        const div = document.createElement('div');
+        div.className = 'ev';
+        const when = new Date(e.created_at).toLocaleString();
+        div.innerHTML = `<span class="tag t-${esc(e.type)}">${esc(e.type)}</span><b class="act">${esc(e.action)}</b> — ${esc(e.detail || '')}` +
+          `<div class="meta">${esc(when)} · user: ${esc(e.user || '—')} · server: ${esc(e.guild_id || '—')} · ip: ${esc(e.ip || '—')}</div>`;
+        box.appendChild(div);
+      });
+      $('pageInfo').textContent = `showing ${d.rows.length} of ${d.total}`;
+      $('prevBtn').disabled = offset === 0;
+      $('nextBtn').disabled = offset + LIM >= d.total;
+    } catch { $('err').textContent = 'Load failed!'; }
+  }
+  function page(d) { load(offset + d * LIM); }
+  load(0);
+</script>
+</body>
+</html>

@@ -5,71 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard — Tier Bot</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/dash.css">
 <style>
-  .dash-hero { text-align: left; padding: 10px 4px 20px; animation: fadeUp .5s ease both; }
-  .dash-hero .live-badge {
-    display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px;
-    font-size: 11.5px; font-weight: 800; letter-spacing: 1.5px;
-    background: rgba(35, 208, 127, .08); border: 1px solid rgba(35, 208, 127, .4); color: #3fd97c; margin-bottom: 12px;
-  }
-  .dash-hero .live-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fd97c; box-shadow: 0 0 10px #3fd97c; animation: dotPulse 1.8s infinite; }
-  .dash-hero h1 {
-    font-size: clamp(30px, 5vw, 44px); font-weight: 900; letter-spacing: -1px;
-    background: linear-gradient(92deg, #fff 15%, #a5b4fc 50%, #f0abfc 80%);
-    background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent;
-    animation: shine 7s linear infinite;
-  }
-  .dash-hero p { color: var(--muted); margin-top: 8px; font-size: 14.5px; }
-  .guild-bar {
-    display: flex; gap: 10px; align-items: center;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 14px 16px; margin-bottom: 16px; animation: fadeUp .5s ease both;
-  }
-  .guild-bar .g-ico {
-    width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    display: flex; align-items: center; justify-content: center; font-size: 18px;
-    box-shadow: 0 5px 16px rgba(88, 101, 242, .45);
-  }
-  .guild-bar input { flex: 1; border-radius: 10px; }
-  .dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .dstat {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 15px;
-    padding: 18px 16px; display: flex; align-items: center; gap: 14px;
-    animation: fadeUp .5s ease both; transition: transform .18s, border-color .18s;
-  }
-  .dstat:hover { transform: translateY(-3px); border-color: rgba(88, 101, 242, .5); }
-  .dstat .di {
-    width: 44px; height: 44px; border-radius: 13px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; font-size: 21px;
-    background: rgba(88, 101, 242, .13); border: 1px solid rgba(88, 101, 242, .35);
-  }
-  .dstat .dn { font-size: 24px; font-weight: 900; color: #fff; line-height: 1.1; }
-  .dstat .dl { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
-  .mgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-  .mcard {
-    display: flex; gap: 14px; align-items: flex-start; text-decoration: none; color: inherit;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 15px; padding: 20px;
-    animation: fadeUp .5s ease both; transition: transform .2s, border-color .2s, box-shadow .2s; position: relative; overflow: hidden;
-  }
-  .mcard::after {
-    content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity .25s; pointer-events: none;
-    background: radial-gradient(380px 110px at 50% -30px, rgba(88, 101, 242, .2), transparent 70%);
-  }
-  .mcard:hover { transform: translateY(-4px); border-color: rgba(88, 101, 242, .55); box-shadow: 0 14px 36px rgba(0, 0, 0, .45); }
-  .mcard:hover::after { opacity: 1; }
-  .mcard .mi {
-    width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; font-size: 23px;
-    background: linear-gradient(135deg, rgba(88,101,242,.25), rgba(235,69,158,.18));
-    border: 1px solid rgba(88, 101, 242, .35);
-  }
-  .mcard h3 { color: #fff; font-size: 16px; margin-bottom: 4px; }
-  .mcard h3 .go { color: var(--accent-2); transition: margin .2s; }
-  .mcard:hover h3 .go { margin-left: 5px; }
-  .mcard p { color: var(--muted); font-size: 13px; line-height: 1.55; }
-  .sec-title { color: #fff; font-size: 15px; font-weight: 800; letter-spacing: .4px; margin: 22px 0 12px 2px; }
-  @media (max-width: 560px) { .guild-bar { flex-wrap: wrap; } }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 18px; position: sticky; top: 62px; z-index: 5; background: rgba(11,13,19,.85); backdrop-filter: blur(12px); padding: 10px; border-radius: 14px; border: 1px solid var(--border); }
+  .tabs button { padding: 9px 15px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,.04); color: var(--muted); font-weight: 700; font-size: 13px; cursor: pointer; transition: all .15s; }
+  .tabs button:hover { color: #fff; border-color: var(--accent); }
+  .tabs button.sel { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(88,101,242,.45); }
+  .tabpane { display: none; }
+  .tabpane.sel { display: block; animation: fadeUp .4s ease both; }
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .filter-bar input, .filter-bar select { border-radius: 10px; min-width: 130px; flex: 1; }
+  .ev { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; }
+  .ev .meta { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+  .ev b.act { color: #fff; }
+  .tag { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; letter-spacing: .6px; margin-right: 6px; }
+  .t-login { background: rgba(88,101,242,.15); color: #a5b4fc; }
+  .t-ai { background: rgba(53,208,127,.12); color: #3fd97c; }
+  .t-security { background: rgba(250,119,124,.14); color: #fa777c; }
+  .t-tier { background: rgba(240,171,252,.13); color: #f0abfc; }
+  .t-code, .t-coding, .t-mcp, .t-file, .t-audit { background: rgba(255,255,255,.07); color: #c9cdd3; }
+  .pager { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+  .check { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .chk { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; padding: 14px 16px; font-size: 13.5px; }
+  .chk b { color: #fff; display: block; margin-bottom: 3px; }
+  .ok { color: #3fd97c; } .bad { color: #fa777c; }
+  .blk { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+  .blk code { flex: 1; }
+  .frow { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+  .frow code { flex: 1; color: #fff; word-break: break-all; }
+  @media (min-width: 1100px) { main { max-width: 1100px; } }
 </style>
 </head>
 <body>
@@ -79,6 +43,9 @@
   <span class="logo">🤖 TierBot</span>
   <a data-page href="/">Home</a>
   <a data-page href="/dashboard">Dashboard</a>
+  <a data-page href="/activity">Tracking</a>
+  <a data-page href="/security">Security</a>
+  <a data-page href="/files">Files</a>
   <a data-page href="/tiers">Tier List</a>
   <a data-page href="/ai">AI Chat</a>
   <a data-page href="/commands">Commands</a>
@@ -89,63 +56,266 @@
   <div class="dash-hero">
     <div class="live-badge"><i></i>CONTROL CENTER</div>
     <h1>Dashboard</h1>
-    <p>Every stat and shortcut in one place. Enter a Server ID for server details.</p>
+    <p>Every module in one place — overview, tiers, AI, commands, status, codes, tracking, security, files.</p>
   </div>
 
-  <div class="guild-bar">
-    <div class="g-ico">🖥️</div>
-    <input id="guild" placeholder="Server ID — right-click server → Copy Server ID">
-    <button class="action" onclick="load()">Load</button>
-  </div>
-  <div class="err" id="err"></div>
-
-  <div class="dash-stats">
-    <div class="dstat"><div class="di">🤖</div><div><div class="dn" id="dBot">–</div><div class="dl">Bot</div></div></div>
-    <div class="dstat"><div class="di">🌐</div><div><div class="dn" id="dServers">–</div><div class="dl">Servers</div></div></div>
-    <div class="dstat"><div class="di">⏱️</div><div><div class="dn" id="dUptime">–</div><div class="dl">Uptime</div></div></div>
-    <div class="dstat"><div class="di">🔒</div><div><div class="dn" id="dGate">–</div><div class="dl">Code Gate</div></div></div>
+  <div class="tabs" id="tabbar">
+    <button data-tab="overview">📊 Overview</button>
+    <button data-tab="tiers">🏆 Tiers</button>
+    <button data-tab="ai">🤖 AI Chat</button>
+    <button data-tab="commands">⌨️ Commands</button>
+    <button data-tab="status">📡 Status</button>
+    <button data-tab="codes">🎟️ Codes</button>
+    <button data-tab="activity">🔍 Tracking</button>
+    <button data-tab="security">🛡️ Security</button>
+    <button data-tab="files">📁 Files</button>
   </div>
 
-  <div class="sec-title">Manage</div>
-  <div class="mgrid">
-    <a class="mcard" href="/tiers"><div class="mi">🏆</div><div><h3>Tier List <span class="go">→</span></h3><p id="cTiers">—</p></div></a>
-    <a class="mcard" href="/ai"><div class="mi">🤖</div><div><h3>AI Chat <span class="go">→</span></h3><p id="cAI">—</p></div></a>
-    <a class="mcard" href="#codes"><div class="mi">🎟️</div><div><h3>Join Codes <span class="go">↓</span></h3><p id="cCodes">—</p></div></a>
-    <a class="mcard" href="/commands"><div class="mi">🔌</div><div><h3>MCP / Commands <span class="go">→</span></h3><p id="cMCP">—</p></div></a>
-  </div>
+  <!-- OVERVIEW -->
+  <section class="tabpane" id="tab-overview">
+    <div class="guild-bar">
+      <div class="g-ico">🖥️</div>
+      <input id="guild" placeholder="Server ID — right-click server → Copy Server ID">
+      <button class="action" onclick="load()">Load</button>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="dash-stats">
+      <div class="dstat"><div class="di">🤖</div><div><div class="dn" id="dBot">–</div><div class="dl">Bot</div></div></div>
+      <div class="dstat"><div class="di">🌐</div><div><div class="dn" id="dServers">–</div><div class="dl">Servers</div></div></div>
+      <div class="dstat"><div class="di">⏱️</div><div><div class="dn" id="dUptime">–</div><div class="dl">Uptime</div></div></div>
+      <div class="dstat"><div class="di">🔒</div><div><div class="dn" id="dGate">–</div><div class="dl">Code Gate</div></div></div>
+    </div>
+    <div class="sec-title">Manage</div>
+    <div class="mgrid">
+      <a class="mcard" href="#/tiers"><div class="mi">🏆</div><div><h3>Tier List <span class="go">→</span></h3><p id="cTiers">—</p></div></a>
+      <a class="mcard" href="#/ai"><div class="mi">🤖</div><div><h3>AI Chat <span class="go">→</span></h3><p id="cAI">—</p></div></a>
+      <a class="mcard" href="#/codes"><div class="mi">🎟️</div><div><h3>Join Codes <span class="go">→</span></h3><p id="cCodes">—</p></div></a>
+      <a class="mcard" href="#/commands"><div class="mi">🔌</div><div><h3>MCP / Commands <span class="go">→</span></h3><p id="cMCP">—</p></div></a>
+      <a class="mcard" href="#/activity"><div class="mi">📊</div><div><h3>Tracking <span class="go">→</span></h3><p>Logins, AI use, tier changes, blocks — searchable event log.</p></div></a>
+      <a class="mcard" href="#/security"><div class="mi">🛡️</div><div><h3>Security <span class="go">→</span></h3><p>Posture checklist, brute-force blocks, unblock tools.</p></div></a>
+      <a class="mcard" href="#/files"><div class="mi">📁</div><div><h3>Files <span class="go">→</span></h3><p>Coding-agent workspace browser per server.</p></div></a>
+      <a class="mcard" href="#/status"><div class="mi">📡</div><div><h3>Status <span class="go">→</span></h3><p>Live bot health and diagnostics.</p></div></a>
+    </div>
+  </section>
 
-  <div class="sec-title" id="codes">🎟️ Join Codes</div>
-  <p class="sub">Generate 8-digit codes here. Users type <code style="background:#26272f;padding:2px 8px;border-radius:6px">/join 12345678</code> in Discord. <b>Admin</b> codes also grant bot management.</p>
-  <div class="panel">
-    <div class="row">
-      <input id="cdLabel" placeholder="Label (e.g. friends)" style="max-width:190px">
-      <select id="cdRole" style="max-width:130px">
-        <option value="user">user</option>
-        <option value="admin">admin</option>
+  <!-- TIERS -->
+  <section class="tabpane" id="tab-tiers">
+    <h2 class="page">🏆 <span id="tListName">Tier List</span></h2>
+    <p class="sub">Live from the bot database.</p>
+    <div class="panel">
+      <div class="row">
+        <input id="tGuild" placeholder="Server ID (right-click server → Copy Server ID)">
+        <input id="tKey" type="password" placeholder="Dashboard key (for edits)" style="max-width:220px">
+        <button class="action" onclick="tierLoad()">Load</button>
+      </div>
+      <div class="hint">Turn on Developer Mode in Discord, right-click the server → <code>Copy Server ID</code>. Logged in as admin — key not needed.</div>
+      <div class="err" id="tErr"></div>
+    </div>
+    <div id="tTiers"></div>
+    <div class="panel">
+      <h2 class="page" style="font-size:18px">➕ Add player</h2>
+      <div class="row">
+        <input id="tPTier" placeholder="Tier (e.g. S)">
+        <input id="tPName" placeholder="Player name">
+        <button class="action" onclick="tierAddPlayer()">Add</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="page" style="font-size:18px">🆕 Manage tiers</h2>
+      <div class="row">
+        <input id="tTName" placeholder="Tier name (e.g. SS)">
+        <button class="action" onclick="tierCreate()">Create tier</button>
+      </div>
+      <div class="row">
+        <input id="tETier" placeholder="Tier">
+        <input id="tEEmoji" placeholder="Emoji (e.g. 👑)">
+        <button class="action" onclick="tierSetEmoji()">Set emoji</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI -->
+  <section class="tabpane" id="tab-ai">
+    <h2 class="page">🤖 AI Playground</h2>
+    <p class="sub">Same brain as the <code style="background:#2b2d31;padding:2px 8px;border-radius:6px">!ai</code> command.</p>
+    <div class="panel">
+      <div class="conic-frame" style="margin-bottom:12px"><div class="chat-box" id="aiChat" style="margin-bottom:0;border:none">
+        <div class="msg bot welcome">👋 Hey! Ask me anything — questions, code, anything!</div>
+      </div></div>
+      <div class="chat-input">
+        <input id="aiPrompt" placeholder="Type your question..." autocomplete="off">
+        <button class="action" id="aiSendBtn" onclick="aiSend()">Send ➤</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMMANDS -->
+  <section class="tabpane" id="tab-commands">
+    <h2 class="page">⌨️ Commands</h2>
+    <p class="sub">Prefix: <code style="background:#5865f2;padding:2px 8px;border-radius:6px;color:#fff">!</code> (+ <code style="background:#2b2d31;padding:2px 8px;border-radius:6px">!!</code> also works) — type <code style="background:#2b2d31;padding:2px 8px;border-radius:6px">!help</code> in Discord too.</p>
+    <div class="cmd"><code>!tier show</code><p>Show the full tier list embed.</p></div>
+    <div class="cmd"><code>!tier add S PlayerName</code><p>Add a player to a tier.</p></div>
+    <div class="cmd"><code>!tier remove S PlayerName</code><p>Remove a player from a tier.</p></div>
+    <div class="cmd"><code>!tier create SS</code><p>Create a brand new tier.</p></div>
+    <div class="cmd"><code>!tier delete SS</code><p>Delete a tier and its players.</p></div>
+    <div class="cmd"><code>!tier emoji S 👑</code><p>Set a custom emoji shown before the tier. Use <code>clear</code> to reset.</p></div>
+    <div class="cmd"><code>!tier setname My List</code><p>Rename the tier list.</p></div>
+    <div class="cmd"><code>!tier reset</code><p>Clear all players (keeps tiers).</p></div>
+    <div class="cmd"><code>!ai your question</code><p>Ask the AI (remembers last ~4 exchanges per server).</p></div>
+    <div class="cmd"><code>!ai forget</code><p>Erase your chat memory on this server.</p></div>
+    <div class="cmd"><code>!ai coding auto|on|off</code><p>Coding agent mode (default auto: files only when needed).</p></div>
+    <div class="cmd"><code>!files / !get &lt;path&gt;</code><p>List / download coding-agent workspace files.</p></div>
+    <div class="cmd"><code>!!connect status</code><p>Show AI mode for this server.</p></div>
+    <div class="cmd"><code>!!connect login [openrouter|google|huggingface|github]</code><p>Keyless login, no API key needed.</p></div>
+    <div class="cmd"><code>!!connect auth &lt;CODE&gt;</code><p>Unlock AI with the owner code.</p></div>
+    <div class="cmd"><code>!!connect api &lt;URL&gt; &lt;KEY&gt; [model]</code><p>Custom OpenAI-compatible endpoint (mods).</p></div>
+    <div class="cmd"><code>!!connect free</code><p>Back to free AI (mods).</p></div>
+    <div class="cmd"><code>/join &lt;8-digit-code&gt;</code><p>Join with a dashboard code (admin codes grant management too).</p></div>
+    <div class="cmd"><code>!ping</code><p>Check bot latency.</p></div>
+    <div class="cmd"><code>!8ball Will I win?</code><p>Magic 8-ball answers.</p></div>
+    <div class="cmd"><code>!roll 100</code><p>Roll a dice up to N.</p></div>
+    <div class="cmd"><code>!joke</code><p>Random joke.</p></div>
+    <div class="cmd"><code>!say hello</code><p>Bot echoes your text.</p></div>
+    <div class="cmd"><code>!avatar @user</code><p>Show someone's avatar.</p></div>
+    <div class="cmd"><code>!userinfo @user</code><p>Info about a user.</p></div>
+    <div class="cmd"><code>!serverinfo</code><p>Info about the server.</p></div>
+    <div class="cmd"><code>!clear 10</code><p>Bulk delete messages (mods only).</p></div>
+  </section>
+
+  <!-- STATUS -->
+  <section class="tabpane" id="tab-status">
+    <h2 class="page">📡 Live Status</h2>
+    <p class="sub">Auto-refreshes every 10 seconds.</p>
+    <div class="status-grid">
+      <div class="stat"><div class="num" id="sBot">–</div><div class="lbl">Bot</div></div>
+      <div class="stat"><div class="num" id="sGuilds">–</div><div class="lbl">Servers</div></div>
+      <div class="stat"><div class="num" id="sUptime">–</div><div class="lbl">Uptime</div></div>
+    </div>
+    <h2 class="page" style="font-size:18px;margin:24px 0 12px">Raw health JSON</h2>
+    <pre class="json" id="raw">loading...</pre>
+  </section>
+
+  <!-- CODES -->
+  <section class="tabpane" id="tab-codes">
+    <div class="sec-title" style="margin-top:0">🎟️ Join Codes</div>
+    <p class="sub">Generate 8-digit codes here. Users type <code style="background:#26272f;padding:2px 8px;border-radius:6px">/join 12345678</code> in Discord. <b>Admin</b> codes also grant bot management.</p>
+    <div class="panel">
+      <div class="row">
+        <input id="cdGuild" placeholder="Server ID (empty = global)" style="max-width:220px">
+        <input id="cdLabel" placeholder="Label (e.g. friends)" style="max-width:190px">
+        <select id="cdRole" style="max-width:130px">
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+        </select>
+        <input id="cdMax" type="number" min="0" placeholder="Max uses (0 = ∞)" style="max-width:170px">
+        <input id="cdExp" type="number" min="0" placeholder="Expires hrs (0 = never)" style="max-width:180px">
+        <button class="action" onclick="genCode()">Generate</button>
+      </div>
+      <div class="hint">Leave Server ID empty for a global code, or type one to lock it to a server. User codes unlock AI.</div>
+      <div class="err" id="cdErr"></div>
+      <div id="cdNew" class="big-code" title="Click to copy"></div>
+    </div>
+    <div class="panel">
+      <div class="row">
+        <button class="action" onclick="loadCodes()">↻ Refresh list</button>
+      </div>
+      <div id="cdList"></div>
+    </div>
+  </section>
+
+  <!-- TRACKING -->
+  <section class="tabpane" id="tab-activity">
+    <div class="dash-stats" id="aStats"></div>
+    <div class="filter-bar">
+      <select id="fType">
+        <option value="">all types</option>
+        <option value="login">login</option><option value="ai">ai</option>
+        <option value="tier">tier</option><option value="code">code</option>
+        <option value="mcp">mcp</option><option value="coding">coding</option>
+        <option value="file">file</option><option value="security">security</option>
+        <option value="audit">audit</option>
       </select>
-      <input id="cdMax" type="number" min="0" placeholder="Max uses (0 = ∞)" style="max-width:170px">
-      <input id="cdExp" type="number" min="0" placeholder="Expires hrs (0 = never)" style="max-width:180px">
-      <button class="action" onclick="genCode()">Generate</button>
+      <input id="fAction" placeholder="action (e.g. login-fail)">
+      <input id="fUser" placeholder="user contains...">
+      <input id="fGuild" placeholder="Server ID">
+      <select id="fDays"><option value="1">last 24h</option><option value="7" selected>last 7d</option><option value="30">last 30d</option></select>
+      <button class="action" onclick="actLoad(0)">Filter</button>
     </div>
-    <div class="hint">Leave Server ID empty for a global code, or type one above to lock it to a server. User codes unlock AI.</div>
-    <div class="err" id="cdErr"></div>
-    <div id="cdNew" class="big-code" title="Click to copy"></div>
-  </div>
-  <div class="panel">
-    <div class="row">
-      <button class="action" onclick="loadCodes()">↻ Refresh list</button>
+    <div class="err" id="aErr"></div>
+    <div id="aList"></div>
+    <div class="pager">
+      <button class="action" id="aPrevBtn" onclick="actPage(-1)">← Newer</button>
+      <span class="hint" id="aPageInfo"></span>
+      <button class="action" id="aNextBtn" onclick="actPage(1)">Older →</button>
     </div>
-    <div id="cdList"></div>
-  </div>
+  </section>
+
+  <!-- SECURITY -->
+  <section class="tabpane" id="tab-security">
+    <div class="sec-title" style="margin-top:0">Posture checklist</div>
+    <div class="check" id="secChecks"></div>
+    <div class="sec-title">Stats (24h)</div>
+    <div class="dash-stats" id="secStats"></div>
+    <div class="sec-title">Blocked IPs / accounts</div>
+    <p class="hint">10 fails/30min → IP blocked 30min · 5 fails/15min → account cooled 15min · 5 tries/5min → login 429.</p>
+    <div class="err" id="secErr"></div>
+    <div id="secBlocks"></div>
+    <div class="row" style="margin-top:10px"><button class="action danger" onclick="secUnblockAll()">Unblock everything</button></div>
+  </section>
+
+  <!-- FILES -->
+  <section class="tabpane" id="tab-files">
+    <div class="guild-bar">
+      <div class="g-ico">🖥️</div>
+      <input id="fileGuild" placeholder="Server ID — right-click server → Copy Server ID">
+      <button class="action" onclick="fileLoad()">Load</button>
+    </div>
+    <div class="err" id="fileErr"></div>
+    <div id="fileList"></div>
+  </section>
 </main>
 <script src="/nav.js"></script>
 <script>
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const TABS = ['overview', 'tiers', 'ai', 'commands', 'status', 'codes', 'activity', 'security', 'files'];
+  const inited = {};
 
+  function guildVal() { return ($('guild').value || '').trim(); }
+  function syncGuildInputs() {
+    const g = localStorage.getItem('guild') || '';
+    for (const id of ['guild', 'tGuild', 'cdGuild', 'fileGuild']) {
+      const el = $(id);
+      if (el && !el.value) el.value = g;
+    }
+  }
+
+  function showTab(name, push = true) {
+    if (!TABS.includes(name)) name = 'overview';
+    document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('sel', b.dataset.tab === name));
+    document.querySelectorAll('.tabpane').forEach(s => s.classList.toggle('sel', s.id === 'tab-' + name));
+    if (push) location.hash = '#/' + name;
+    syncGuildInputs();
+    if (!inited[name]) {
+      inited[name] = true;
+      if (name === 'overview') { load(); loadCodes(); }
+      if (name === 'tiers' && $('tGuild').value) tierLoad();
+      if (name === 'ai') $('aiPrompt').focus();
+      if (name === 'status') statusRefresh();
+      if (name === 'codes') loadCodes();
+      if (name === 'activity') actLoad(0);
+      if (name === 'security') secLoad();
+      if (name === 'files' && $('fileGuild').value) fileLoad();
+    }
+    if (name === 'ai') $('aiPrompt').focus();
+  }
+  document.querySelectorAll('#tabbar button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+  window.addEventListener('hashchange', () => showTab((location.hash || '').replace(/^#\/?/, '') || 'overview', false));
+
+  /* ---- OVERVIEW ---- */
   async function load() {
     $('err').textContent = '';
-    const g = $('guild').value.trim();
+    const g = guildVal();
     if (g) localStorage.setItem('guild', g);
     try {
       const r = await fetch('/api/overview' + (g ? '?guild=' + encodeURIComponent(g) : ''));
@@ -169,17 +339,13 @@
     } catch { $('err').textContent = 'Load failed!'; }
   }
 
-  $('guild').value = localStorage.getItem('guild') || '';
-  $('guild').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
-  load();
-  loadCodes();
-
+  /* ---- CODES ---- */
   async function genCode() {
     $('cdErr').textContent = '';
     $('cdNew').textContent = '';
     $('cdNew').onclick = null;
     const body = {
-      guild: $('guild').value.trim(),
+      guild: ($('cdGuild').value || '').trim() || guildVal(),
       label: $('cdLabel').value.trim(),
       role: $('cdRole').value,
       maxUses: Number($('cdMax').value) || 0,
@@ -204,8 +370,9 @@
       const r = await fetch('/api/codes');
       if (r.status === 401) { location.href = '/login'; return; }
       const d = await r.json();
-      if (d.error) { $('cdErr').textContent = d.error; return; }
+      if (d.error) { const e = $('cdErr'); if (e) e.textContent = d.error; return; }
       const box = $('cdList');
+      if (!box) return;
       box.innerHTML = '';
       if (!d.codes.length) { box.innerHTML = '<div class="empty">No codes yet — generate one above.</div>'; return; }
       d.codes.forEach(c => {
@@ -227,8 +394,317 @@
         }
         box.appendChild(div);
       });
-    } catch { $('cdErr').textContent = 'Load failed!'; }
+    } catch { const e = $('cdErr'); if (e) e.textContent = 'Load failed!'; }
   }
+
+  /* ---- TIERS ---- */
+  const TIER_FALLBACK = ['🔴','🟠','🟡','🟢','🔵','🟣','⚪','⚫','🟤','⭐'];
+  const TIER_COLORS = ['#ff4655','#ff9f1c','#ffd23f','#06d6a0','#118ab2','#9b5de5','#e0e0e0','#80848e','#9c6644','#ff70a6'];
+  let tierCurrent = null;
+  function tierShowErr(m) { $('tErr').textContent = m || ''; }
+  async function tierLoad() {
+    tierShowErr('');
+    const guild = $('tGuild').value.trim();
+    if (!guild) return tierShowErr('Enter the Server ID!');
+    localStorage.setItem('guild', guild);
+    localStorage.setItem('dkey', $('tKey').value);
+    try {
+      const r = await fetch('/api/tiers?guild=' + encodeURIComponent(guild));
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const data = await r.json();
+      if (data.error) return tierShowErr(data.error);
+      tierCurrent = { guild, ...data };
+      tierRender();
+    } catch { tierShowErr('Load failed!'); }
+  }
+  function tierRender() {
+    $('tListName').textContent = tierCurrent.name;
+    const box = $('tTiers');
+    box.innerHTML = '';
+    tierCurrent.tiers.forEach((t, i) => {
+      const color = TIER_COLORS[i % TIER_COLORS.length];
+      const div = document.createElement('div');
+      div.className = 'tier';
+      div.style.setProperty('--tc', color);
+      const emoji = t.emoji || TIER_FALLBACK[i % TIER_FALLBACK.length];
+      div.innerHTML = `<div class="tier-head"><span class="t-emoji">${esc(emoji)}</span> ${esc(t.tier)}<span class="count">${t.players.length} player(s)</span></div>`;
+      const pl = document.createElement('div');
+      pl.className = 'players';
+      if (!t.players.length) pl.innerHTML = '<div class="empty">✨ empty — add the first legend!</div>';
+      t.players.forEach((p, j) => {
+        const row = document.createElement('div');
+        row.className = 'player';
+        row.style.animationDelay = (j * 0.06) + 's';
+        row.innerHTML = `<div class="ava">${esc(p.trim().charAt(0).toUpperCase())}</div><span>${esc(p)}</span>`;
+        const del = document.createElement('button');
+        del.className = 'action danger';
+        del.textContent = 'Remove';
+        del.onclick = () => tierDelPlayer(t.tier, p);
+        row.appendChild(del);
+        pl.appendChild(row);
+      });
+      const tdel = document.createElement('button');
+      tdel.className = 'action danger';
+      tdel.style.cssText = 'margin:0 16px 12px;font-size:12px;padding:4px 10px';
+      tdel.textContent = 'Delete tier';
+      tdel.onclick = () => tierDelTier(t.tier);
+      div.appendChild(pl);
+      div.appendChild(tdel);
+      box.appendChild(div);
+    });
+  }
+  async function tierApi(path, method, body) {
+    const r = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guild: $('tGuild').value.trim(), key: $('tKey').value, ...body }),
+    });
+    return r.json();
+  }
+  async function tierAddPlayer() {
+    const tier = $('tPTier').value.trim().toUpperCase();
+    const player = $('tPName').value.trim();
+    if (!tier || !player) return tierShowErr('Enter tier + player name!');
+    const d = await tierApi('/api/player', 'POST', { tier, player });
+    if (d.error) return tierShowErr(d.error);
+    $('tPName').value = '';
+    tierLoad();
+  }
+  async function tierDelPlayer(tier, player) {
+    const d = await tierApi('/api/player', 'DELETE', { tier, player });
+    if (d.error) return tierShowErr(d.error);
+    tierLoad();
+  }
+  async function tierCreate() {
+    const tier = $('tTName').value.trim().toUpperCase();
+    if (!tier) return tierShowErr('Enter a tier name!');
+    const d = await tierApi('/api/tier', 'POST', { tier });
+    if (d.error) return tierShowErr(d.error);
+    $('tTName').value = '';
+    tierLoad();
+  }
+  async function tierDelTier(tier) {
+    if (!confirm(`Delete tier ${tier}?`)) return;
+    const d = await tierApi('/api/tier', 'DELETE', { tier });
+    if (d.error) return tierShowErr(d.error);
+    tierLoad();
+  }
+  async function tierSetEmoji() {
+    const tier = $('tETier').value.trim().toUpperCase();
+    const emoji = $('tEEmoji').value.trim();
+    if (!tier || !emoji) return tierShowErr('Enter tier + emoji!');
+    const d = await tierApi('/api/emoji', 'POST', { tier, emoji });
+    if (d.error) return tierShowErr(d.error);
+    tierLoad();
+  }
+
+  /* ---- AI ---- */
+  function aiBubble(text, who) {
+    const chat = $('aiChat');
+    const d = document.createElement('div');
+    d.className = 'msg ' + who;
+    d.textContent = text;
+    chat.appendChild(d);
+    chat.scrollTop = chat.scrollHeight;
+    return d;
+  }
+  async function aiSend() {
+    const input = $('aiPrompt');
+    const btn = $('aiSendBtn');
+    const text = input.value.trim();
+    if (!text || btn.disabled) return;
+    aiBubble(text, 'user');
+    input.value = '';
+    btn.disabled = true;
+    const t = document.createElement('div');
+    t.className = 'msg bot';
+    t.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
+    $('aiChat').appendChild(t);
+    $('aiChat').scrollTop = $('aiChat').scrollHeight;
+    try {
+      const r = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text }),
+      });
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const d = await r.json();
+      t.textContent = d.reply || d.error || 'Something went wrong!';
+    } catch {
+      t.textContent = '⚠️ Connection failed, try again!';
+    }
+    $('aiChat').scrollTop = $('aiChat').scrollHeight;
+    btn.disabled = false;
+    input.focus();
+  }
+
+  /* ---- STATUS ---- */
+  async function statusRefresh() {
+    try {
+      const h = await (await fetch('/api/health')).json();
+      $('sBot').textContent = h.online ? '🟢' : '🔴';
+      $('sGuilds').textContent = h.guilds ?? '–';
+      const s = h.uptimeSec || 0;
+      $('sUptime').textContent =
+        s > 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm'
+                 : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+      $('raw').textContent = JSON.stringify(h, null, 2);
+    } catch {
+      $('raw').textContent = 'unreachable';
+    }
+  }
+
+  /* ---- TRACKING ---- */
+  let actOffset = 0;
+  const ACT_LIM = 50;
+  function actQuery() {
+    const p = new URLSearchParams({ days: $('fDays').value, limit: ACT_LIM, offset: actOffset });
+    if ($('fType').value) p.set('type', $('fType').value);
+    if ($('fAction').value.trim()) p.set('action', $('fAction').value.trim());
+    if ($('fUser').value.trim()) p.set('user', $('fUser').value.trim());
+    if ($('fGuild').value.trim()) p.set('guild', $('fGuild').value.trim());
+    return p.toString();
+  }
+  async function actLoad(off) {
+    actOffset = Math.max(0, off);
+    $('aErr').textContent = '';
+    try {
+      const r = await fetch('/api/events?' + actQuery());
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const d = await r.json();
+      if (d.error) { $('aErr').textContent = d.error; return; }
+      const s = d.stats || {};
+      $('aStats').innerHTML =
+        `<div class="dstat"><div><div class="dn">${s.total ?? '–'}</div><div class="dl">Total events</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.last24h ?? '–'}</div><div class="dl">Last 24h</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.loginFails24h ?? '–'}</div><div class="dl">Login fails 24h</div></div></div>`;
+      const box = $('aList');
+      box.innerHTML = '';
+      if (!d.rows.length) { box.innerHTML = '<div class="empty">No events match.</div>'; }
+      d.rows.forEach(e => {
+        const div = document.createElement('div');
+        div.className = 'ev';
+        const when = new Date(e.created_at).toLocaleString();
+        div.innerHTML = `<span class="tag t-${esc(e.type)}">${esc(e.type)}</span><b class="act">${esc(e.action)}</b> — ${esc(e.detail || '')}` +
+          `<div class="meta">${esc(when)} · user: ${esc(e.user || '—')} · server: ${esc(e.guild_id || '—')} · ip: ${esc(e.ip || '—')}</div>`;
+        box.appendChild(div);
+      });
+      $('aPageInfo').textContent = `showing ${d.rows.length} of ${d.total}`;
+      $('aPrevBtn').disabled = actOffset === 0;
+      $('aNextBtn').disabled = actOffset + ACT_LIM >= d.total;
+    } catch { $('aErr').textContent = 'Load failed!'; }
+  }
+  function actPage(d) { actLoad(actOffset + d * ACT_LIM); }
+
+  /* ---- SECURITY ---- */
+  const SEC_CHECKS = [
+    ['adminAuth', 'Admin login enabled', 'Set ADMIN_USER + ADMIN_PASS to require login.'],
+    ['defaultCreds', 'Default credentials CHANGED', 'admin / change_this_password must NOT be in use.', true],
+    ['sessionSecretSet', 'SESSION_SECRET set', 'Long random secret signs sessions + encrypts keys.'],
+    ['dashboardKeyChanged', 'DASHBOARD_KEY changed', 'Web-edit key must not be the default.'],
+    ['dashboardHttps', 'Dashboard HTTPS', 'DASHBOARD_URL should be https (tunnel URL).'],
+    ['discordOAuth', 'Discord OAuth configured', 'Needed for member logins + join codes.'],
+    ['trustProxy', 'Real-IP behind tunnel', 'CF-Connecting-IP is trusted for bans + audit.'],
+    ['joinGate', 'Join-code gate on', 'REQUIRE_JOIN_CODE or AI_AUTH_CODE set.'],
+  ];
+  async function secLoad() {
+    try {
+      const r = await fetch('/api/security');
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const d = await r.json();
+      if (d.error) { $('secErr').textContent = d.error; return; }
+      const c = d.checklist || {};
+      $('secChecks').innerHTML = SEC_CHECKS.map(([k, label, hint, invert]) => {
+        const pass = invert ? !c[k] : !!c[k];
+        return `<div class="chk"><b>${pass ? '<span class="ok">✅</span>' : '<span class="bad">❌</span>'} ${esc(label)}</b><span class="hint">${esc(hint)}</span></div>`;
+      }).join('');
+      const s = d.stats || {};
+      $('secStats').innerHTML =
+        `<div class="dstat"><div><div class="dn">${s.total ?? '–'}</div><div class="dl">Events total</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.last24h ?? '–'}</div><div class="dl">Events 24h</div></div></div>` +
+        `<div class="dstat"><div><div class="dn">${s.loginFails24h ?? '–'}</div><div class="dl">Login fails 24h</div></div></div>`;
+      const box = $('secBlocks');
+      box.innerHTML = '';
+      const bl = d.blocks || { ips: [], users: [] };
+      if (!bl.ips.length && !bl.users.length) { box.innerHTML = '<div class="empty">Nothing blocked right now.</div>'; return; }
+      bl.ips.forEach(b => {
+        const div = document.createElement('div');
+        div.className = 'blk';
+        div.innerHTML = `<span>🚫 IP</span><code>${esc(b.ip)} (${b.fails} fails)</code>`;
+        const btn = document.createElement('button');
+        btn.className = 'action'; btn.textContent = 'Unblock';
+        btn.onclick = () => secUnblock({ ip: b.ip });
+        div.appendChild(btn);
+        box.appendChild(div);
+      });
+      bl.users.forEach(b => {
+        const div = document.createElement('div');
+        div.className = 'blk';
+        div.innerHTML = `<span>🚫 Account</span><code>${esc(b.user)} (${b.fails} fails)</code>`;
+        const btn = document.createElement('button');
+        btn.className = 'action'; btn.textContent = 'Unblock';
+        btn.onclick = () => secUnblock({ user: b.user });
+        div.appendChild(btn);
+        box.appendChild(div);
+      });
+    } catch { $('secErr').textContent = 'Load failed!'; }
+  }
+  async function secUnblock(body) {
+    await fetch('/api/unblock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
+    secLoad();
+  }
+  async function secUnblockAll() {
+    if (!confirm('Unblock all IPs + accounts?')) return;
+    await secUnblock({ all: true });
+  }
+
+  /* ---- FILES ---- */
+  function fileGuildVal() { return ($('fileGuild').value || '').trim(); }
+  async function fileLoad() {
+    $('fileErr').textContent = '';
+    const g = fileGuildVal();
+    if (g) localStorage.setItem('guild', g);
+    const box = $('fileList');
+    box.innerHTML = '';
+    if (!g) { $('fileErr').textContent = 'Enter a Server ID first!'; return; }
+    try {
+      const r = await fetch('/api/files?guild=' + encodeURIComponent(g));
+      if (r.status === 401) { location.href = '/login'; return; }
+      if (r.status === 403) { location.href = '/user'; return; }
+      const d = await r.json();
+      if (d.error) { $('fileErr').textContent = d.error; return; }
+      if (!d.files.length) { box.innerHTML = '<div class="empty">Workspace empty for this server.</div>'; return; }
+      d.files.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'frow';
+        div.innerHTML = `<span>📄</span><code>${esc(f)}</code>`;
+        const dl = document.createElement('a');
+        dl.className = 'action'; dl.textContent = 'Download'; dl.style.textDecoration = 'none';
+        dl.href = '/api/file-download?guild=' + encodeURIComponent(g) + '&path=' + encodeURIComponent(f);
+        const del = document.createElement('button');
+        del.className = 'action danger'; del.textContent = 'Delete';
+        del.onclick = async () => {
+          if (!confirm('Delete ' + f + '?')) return;
+          await fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guild: g, path: f }) });
+          fileLoad();
+        };
+        div.appendChild(dl); div.appendChild(del);
+        box.appendChild(div);
+      });
+    } catch { $('fileErr').textContent = 'Load failed!'; }
+  }
+
+  /* ---- INIT ---- */
+  $('guild').value = localStorage.getItem('guild') || '';
+  $('guild').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+  $('aiPrompt').addEventListener('keydown', e => { if (e.key === 'Enter') aiSend(); });
+  showTab((location.hash || '').replace(/^#\/?/, '') || 'overview', false);
+  statusRefresh();
+  setInterval(statusRefresh, 10000);
 </script>
 </body>
 </html>

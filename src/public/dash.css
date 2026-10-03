@@ -1,0 +1,65 @@
+/* Shared dashboard/tracking style — same look on Dashboard, Tracking, Security, Files. */
+.dash-hero { text-align: left; padding: 10px 4px 20px; animation: fadeUp .5s ease both; }
+.dash-hero .live-badge {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 800; letter-spacing: 1.5px;
+  background: rgba(35, 208, 127, .08); border: 1px solid rgba(35, 208, 127, .4); color: #3fd97c; margin-bottom: 12px;
+}
+.dash-hero .live-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fd97c; box-shadow: 0 0 10px #3fd97c; animation: dotPulse 1.8s infinite; }
+.dash-hero h1 {
+  font-size: clamp(30px, 5vw, 44px); font-weight: 900; letter-spacing: -1px;
+  background: linear-gradient(92deg, #fff 15%, #a5b4fc 50%, #f0abfc 80%);
+  background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shine 7s linear infinite;
+}
+.dash-hero p { color: var(--muted); margin-top: 8px; font-size: 14.5px; }
+.guild-bar {
+  display: flex; gap: 10px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px; margin-bottom: 16px; animation: fadeUp .5s ease both;
+}
+.guild-bar .g-ico {
+  width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+  box-shadow: 0 5px 16px rgba(88, 101, 242, .45);
+}
+.guild-bar input { flex: 1; border-radius: 10px; }
+.dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.dstat {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 15px;
+  padding: 18px 16px; display: flex; align-items: center; gap: 14px;
+  animation: fadeUp .5s ease both; transition: transform .18s, border-color .18s;
+}
+.dstat:hover { transform: translateY(-3px); border-color: rgba(88, 101, 242, .5); }
+.dstat .di {
+  width: 44px; height: 44px; border-radius: 13px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 21px;
+  background: rgba(88, 101, 242, .13); border: 1px solid rgba(88, 101, 242, .35);
+}
+.dstat .dn { font-size: 24px; font-weight: 900; color: #fff; line-height: 1.1; }
+.dstat .dl { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+.mgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.mcard {
+  display: flex; gap: 14px; align-items: flex-start; text-decoration: none; color: inherit;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 15px; padding: 20px;
+  animation: fadeUp .5s ease both; transition: transform .2s, border-color .2s, box-shadow .2s; position: relative; overflow: hidden;
+}
+.mcard::after {
+  content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity .25s; pointer-events: none;
+  background: radial-gradient(380px 110px at 50% -30px, rgba(88, 101, 242, .2), transparent 70%);
+}
+.mcard:hover { transform: translateY(-4px); border-color: rgba(88, 101, 242, .55); box-shadow: 0 14px 36px rgba(0, 0, 0, .45); }
+.mcard:hover::after { opacity: 1; }
+.mcard .mi {
+  width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 23px;
+  background: linear-gradient(135deg, rgba(88,101,242,.25), rgba(235,69,158,.18));
+  border: 1px solid rgba(88, 101, 242, .35);
+}
+.mcard h3 { color: #fff; font-size: 16px; margin-bottom: 4px; }
+.mcard h3 .go { color: var(--accent-2); transition: margin .2s; }
+.mcard:hover h3 .go { margin-left: 5px; }
+.mcard p { color: var(--muted); font-size: 13px; line-height: 1.55; }
+.sec-title { color: #fff; font-size: 15px; font-weight: 800; letter-spacing: .4px; margin: 22px 0 12px 2px; }
+@media (max-width: 560px) { .guild-bar { flex-wrap: wrap; } }

@@ -89,11 +89,86 @@ export function verifyDiscordSession(token) {
   }
 }
 
+// ---- Dashboard members (any Discord user, non-admin) ----
+
+export function signMemberSession(discordId, username) {
+  const exp = Date.now() + SESSION_DAYS * 24 * 3600 * 1000;
+  const payload = `member.${b64urlEncode(`${discordId}:${username}`)}.${exp}`;
+  const sig = createHmac('sha256', secret()).update(payload).digest('hex');
+  return `${payload}.${sig}`;
+}
+
+export function verifyMemberSession(token) {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts[0] !== 'member' || parts.length !== 4) return null;
+    const [, u, exp, sig] = parts;
+    if (Number(exp) < Date.now()) return null;
+    const expect = createHmac('sha256', secret()).update(`member.${u}.${exp}`).digest('hex');
+    if (!safeEqual(sig, expect)) return null;
+    const [id, username] = b64urlDecode(u).split(':');
+    if (!id) return null;
+    void username;
+    return username || `user:${id}`;
+  } catch {
+    return null;
+  }
+}
+
+export function sessionDiscordId(req) {
+  try {
+    const token = parseCookies(req).tb_session;
+    if (!token) return null;
+    const parts = String(token).split('.');
+    const b64 = parts[0] === 'discord' && parts.length === 4 ? parts[1]
+      : parts[0] === 'member' && parts.length === 4 ? parts[1] : null;
+    if (!b64) return null;
+    const [id] = b64urlDecode(b64).split(':');
+    return /^\d{5,25}$/.test(id || '') ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+// admin = owner login (ADMIN_USER/PASS, admin Discord, allowlisted Google).
+// member = any other Discord login (can only claim a personal /join code).
+export function sessionRole(req) {
+  if (!authEnabled()) return 'admin';
+  const token = parseCookies(req).tb_session;
+  if (!token) return null;
+  if (token.startsWith('member.')) return verifyMemberSession(token) ? 'member' : null;
+  if (sessionUser(req)) return 'admin';
+  return null;
+}
+
+export function isAdmin(req) {
+  return sessionRole(req) === 'admin';
+}
+
+// Admin-only pages -> redirect to /login (members go to /user)
+export function requireAdminPage(req, res, next) {
+  const role = sessionRole(req);
+  if (role === 'admin') return next();
+  if (role === 'member') return res.redirect('/user');
+  if (!authEnabled() || sessionUser(req)) return next();
+  return res.redirect('/login');
+}
+
+// Admin-only JSON APIs -> 401/403
+export function requireAdminApi(req, res, next) {
+  const role = sessionRole(req);
+  if (role === 'admin') return next();
+  if (role === 'member') return res.status(403).json({ error: 'Admins only!' });
+  if (!authEnabled() || sessionUser(req)) return next();
+  return res.status(401).json({ error: 'Login required', login: true });
+}
+
 export function sessionUser(req) {
   if (!authEnabled()) return 'open';
   const token = parseCookies(req).tb_session;
   if (!token) return null;
   if (token.startsWith('discord.')) return verifyDiscordSession(token);
+  if (token.startsWith('member.')) return verifyMemberSession(token);
   if (token.startsWith('google.')) return verifyGoogleSession(token);
   return verifySession(token);
 }
@@ -145,8 +220,8 @@ export function verifyGoogleSession(token) {
   }
 }
 
-export function sessionCookie(token) {
-  return `tb_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${SESSION_DAYS * 24 * 3600}`;
+export function sessionCookie(token, secure = false) {
+  return `tb_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${SESSION_DAYS * 24 * 3600}${secure ? '; Secure' : ''}`;
 }
 
 export function clearCookie() {
@@ -179,4 +254,35 @@ export function isIpBlocked(ip) {
 export function isUserBlocked(user) {
   const now = Date.now();
   return ((userFails.get(user) || []).filter(t => now - t < 15 * 60 * 1000).length) >= 5;
+}
+
+// ---- Security management (for the /security admin page) ----
+
+export function listBlocks() {
+  const now = Date.now();
+  const ips = [];
+  for (const [ip, arr] of ipFails) {
+    const recent = arr.filter(t => now - t < 30 * 60 * 1000);
+    if (recent.length >= 10) ips.push({ ip, fails: recent.length });
+  }
+  const users = [];
+  for (const [user, arr] of userFails) {
+    const recent = arr.filter(t => now - t < 15 * 60 * 1000);
+    if (recent.length >= 5) users.push({ user, fails: recent.length });
+  }
+  return { ips, users, loginHits: hits.size, throttleHints: null };
+}
+
+export function unblockIp(ip) {
+  return ipFails.delete(String(ip));
+}
+
+export function unblockUser(user) {
+  return userFails.delete(String(user));
+}
+
+export function clearAllBlocks() {
+  ipFails.clear();
+  userFails.clear();
+  hits.clear();
 }

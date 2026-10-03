@@ -3,6 +3,9 @@
 // 2) Hugging Face: !!connect login huggingface -> device code -> user enters it
 //    on huggingface.co/device -> bot polls until authorized (needs HF_CLIENT_ID
 //    in .env once: a public OAuth app with the `inference-api` scope).
+// 3) GitHub: !!connect login github -> device code -> user enters it
+//    on github.com/login/device -> bot polls until authorized (needs GITHUB_CLIENT_ID
+//    in .env once: an OAuth App with Device Flow enabled).
 import { randomBytes, createHash } from 'node:crypto';
 import { saveOAuthPending, getOAuthPending, clearOAuthPending, setUserKey, saveOAuthState, consumeOAuthState } from './db.js';
 import { AI_PROVIDERS, GEMINI_NATIVE_BASE } from './ai.js';
@@ -136,6 +139,92 @@ export async function pollHFDevice(deviceCode, intervalSec, maxWaitMs = 5 * 60 *
 export function saveHFLogin(guildId, userId, token) {
   const p = AI_PROVIDERS.huggingface;
   setUserKey(String(guildId), String(userId), 'huggingface', p.baseUrl, token, p.defaultModel);
+  return p.defaultModel;
+}
+
+// ---- GitHub device login (no API key paste, same style as Hugging Face) ----
+// Owner setup (once): create an OAuth App at github.com/settings/developers,
+// enable "Device Flow", set callback to <DASHBOARD_URL> (any https URL works for
+// device flow), then put the Client ID in .env as GITHUB_CLIENT_ID (no secret needed).
+
+export function githubConfigured() {
+  return !!String(process.env.GITHUB_CLIENT_ID || '').trim();
+}
+
+// Step 1: get a device code for the user to enter on github.com/login/device
+export async function startGitHubDevice() {
+  if (!githubConfigured()) {
+    return { ok: false, error: 'GitHub login is not set up! Owner: create an OAuth App at github.com/settings/developers (enable Device Flow) and set GITHUB_CLIENT_ID in .env.' };
+  }
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), 20000);
+  try {
+    const res = await fetch('https://github.com/login/device/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID.trim(), scope: 'read:user' }),
+      signal: c.signal,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.device_code || !data?.user_code) {
+      if (res.status === 404 || data?.error === 'Not Found') {
+        return { ok: false, error: 'GitHub app misconfigured! Owner: check GITHUB_CLIENT_ID and enable Device Flow.' };
+      }
+      return { ok: false, error: data?.error_description || data?.error || `Device request failed (${res.status})` };
+    }
+    return {
+      ok: true,
+      deviceCode: data.device_code,
+      userCode: data.user_code,
+      url: data.verification_uri || 'https://github.com/login/device',
+      interval: Math.max(Number(data.interval) || 5, 5),
+      expiresIn: Number(data.expires_in) || 900,
+    };
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Failed' };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Step 2: poll until the user authorizes (or timeout/deny). Resolves once.
+export async function pollGitHubDevice(deviceCode, intervalSec, maxWaitMs = 5 * 60 * 1000) {
+  const deadline = Date.now() + Math.min(maxWaitMs, 10 * 60 * 1000);
+  let wait = Math.max(intervalSec, 5) * 1000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, wait));
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 20000);
+    try {
+      const body = { client_id: process.env.GITHUB_CLIENT_ID.trim(), device_code: deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' };
+      const res = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body),
+        signal: c.signal,
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.access_token) return { ok: true, token: data.access_token };
+      const err = data?.error;
+      if (err === 'authorization_pending') continue;
+      if (err === 'slow_down') { wait += 5000; continue; }
+      if (err === 'access_denied') return { ok: false, error: 'Authorization denied! Run `!!connect login github` again if this was a mistake.' };
+      if (err === 'expired_token') return { ok: false, error: 'Code expired! Run `!!connect login github` again.' };
+      if (err === 'incorrect_client_credentials' || err === 'incorrect_device_code') return { ok: false, error: 'GitHub app misconfigured! Owner: check GITHUB_CLIENT_ID and enable Device Flow.' };
+      return { ok: false, error: data?.error_description || err || `Token request failed (${res.status})` };
+    } catch (e) {
+      if (e?.name === 'AbortError') continue;
+      return { ok: false, error: e?.message || 'Failed' };
+    } finally {
+      clearTimeout(t);
+    }
+  }
+  return { ok: false, error: 'Timed out waiting! Run `!!connect login github` again.' };
+}
+
+export function saveGitHubLogin(guildId, userId, token) {
+  const p = AI_PROVIDERS['github-models'];
+  setUserKey(String(guildId), String(userId), 'github-models', p.baseUrl, token, p.defaultModel);
   return p.defaultModel;
 }
 

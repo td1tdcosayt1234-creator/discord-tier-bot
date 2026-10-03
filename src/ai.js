@@ -4,9 +4,9 @@
 // 3) !!connect <provider> <API_KEY> [model] -> use that platform's key
 //    e.g. !!connect gemini AIza...  (key from https://aistudio.google.com/apikey)
 //    Supported: gemini, openai, groq, openrouter, deepseek, huggingface,
-//    xai, cerebras, fireworks, together, mistral, api (custom URL)
+//    xai, cerebras, fireworks, together, mistral, github-models, api (custom URL)
 
-import { getAIConfigFull, isUserAuthorized, getUserKey, setUserKey } from './db.js';
+import { getAIConfigFull, isUserAuthorized, getUserKey, setUserKey, getCodingPref, getHistory, saveExchange, HISTORY_CHARS } from './db.js';
 
 const FREE_PROVIDERS = [
   { url: 'https://text.pollinations.ai/openai', model: 'openai' },
@@ -90,6 +90,13 @@ export const AI_PROVIDERS = {
     defaultModel: 'mistral-small-latest',
     keyUrl: 'https://console.mistral.ai/api-keys',
     hint: '...',
+  },
+  'github-models': {
+    label: 'GitHub Models',
+    baseUrl: 'https://models.github.ai/inference',
+    defaultModel: 'openai/gpt-4o-mini',
+    keyUrl: 'https://github.com/settings/tokens',
+    hint: 'github_pat_...',
   },
 };
 
@@ -188,30 +195,32 @@ async function postChat(url, body, apiKey, provider) {
   }
 }
 
-export async function askFreeAI(prompt) {
+export async function askFreeAI(prompt, history = []) {
   const clean = String(prompt || '').trim().slice(0, 1000);
   if (!clean) return null;
+  const past = Array.isArray(history) ? history.filter(m => m?.role && m?.content).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content).slice(0, HISTORY_CHARS) })) : [];
   for (const p of FREE_PROVIDERS) {
-    const r = await postChat(p.url, { model: p.model, messages: [{ role: 'user', content: clean }] }, null);
+    const r = await postChat(p.url, { model: p.model, messages: [...past, { role: 'user', content: clean }] }, null);
     if (r.ok) return r.text;
   }
   return null;
 }
 
-export async function askCustomAI(prompt, { baseUrl, apiKey, model, provider }) {
+export async function askCustomAI(prompt, { baseUrl, apiKey, model, provider }, history = []) {
   const clean = String(prompt || '').trim().slice(0, 1000);
   if (!clean) return { ok: false, error: 'Empty prompt' };
   const base = normalizeBaseUrl(baseUrl);
   if (!base || !apiKey) return { ok: false, error: 'Custom AI is not configured correctly' };
+  const past = Array.isArray(history) ? history.filter(m => m?.role && m?.content).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content).slice(0, HISTORY_CHARS) })) : [];
   // Native Gemini transport (OAuth logins): {base}/models/{model}:generateContent
   if (provider === 'gemini' && /\/v1beta\/?$/.test(base)) {
-    return askGeminiNative(clean, base, apiKey, model || 'gemini-2.0-flash');
+    return askGeminiNative(clean, base, apiKey, model || 'gemini-2.0-flash', past);
   }
   const { isPublicHttpUrl, SSRF_ERROR } = await import('./util.js');
   if (!(await isPublicHttpUrl(base))) return { ok: false, error: SSRF_ERROR };
   const r = await postChat(`${base}/chat/completions`, {
     model: model || 'gpt-3.5-turbo',
-    messages: [{ role: 'user', content: clean }],
+    messages: [...past, { role: 'user', content: clean }],
   }, apiKey, provider);
   if (r.ok) return { ok: true, text: r.text };
   if (r.status === 401 || r.status === 403) return { ok: false, error: 'API key rejected (401/403). Wrong or expired key!' };
@@ -231,14 +240,18 @@ export function parseGeminiNative(data) {
   }
 }
 
-async function askGeminiNative(prompt, base, accessToken, model) {
+async function askGeminiNative(prompt, base, accessToken, model, history = []) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const past = Array.isArray(history) ? history.filter(m => m?.role && m?.content).map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: String(m.content).slice(0, HISTORY_CHARS) }],
+  })) : [];
   try {
     const res = await fetch(`${base.replace(/\/+$/, '')}/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      body: JSON.stringify({ contents: [...past, { role: 'user', parts: [{ text: prompt }] }] }),
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -299,45 +312,61 @@ export async function ensureFreshGoogleKey(guildId, userId, uk) {
 export async function askAI(prompt, guildId, userId) {
   const clean = String(prompt || '').trim().slice(0, 1000);
   if (!clean) return { ok: false, error: 'Please give me a question!' };
+  const gid = guildId ? String(guildId) : null;
+  const uid = userId ? String(userId) : null;
+  // Conversation memory: last exchanges with this user on this server.
+  const hist = (gid && uid) ? getHistory(gid, uid) : [];
+  const remember = text => { if (gid && uid && text) saveExchange(gid, uid, clean, text); };
 
-  if (guildId) {
+  if (gid) {
+    // Coding agent (tools = files/zip/mcp only). Default is AUTO: normal chat,
+    // tools only when the task needs them. 'on' forces it, 'off' disables tools.
+    if (uid) {
+      const pref = getCodingPref(gid, uid);
+      if (pref === 'on' || pref === 'auto') {
+        const { runAgent, hasAgentEndpoint } = await import('./agent.js');
+        if (pref === 'on' || hasAgentEndpoint(gid, uid)) {
+          return runAgent(clean, gid, uid, hist);
+        }
+      }
+    }
     // 1) per-user OAuth key (browser login, no API key paste) wins first
-    if (userId) {
-      const uk = getUserKey(String(guildId), String(userId));
+    if (uid) {
+      const uk = getUserKey(gid, uid);
       if (uk?.api_key) {
         let key = uk.api_key;
         if (uk.provider === 'gemini') {
-          const fr = await ensureFreshGoogleKey(String(guildId), String(userId), uk);
+          const fr = await ensureFreshGoogleKey(gid, uid, uk);
           if (fr.error) {
             if (fr.reauth) return { ok: false, error: fr.error };
-            const free = await askFreeAI(clean);
-            if (free) return { ok: true, text: free, mode: 'free', customError: fr.error };
+            const free = await askFreeAI(clean, hist);
+            if (free) { remember(free); return { ok: true, text: free, mode: 'free', customError: fr.error }; }
             return { ok: false, error: fr.error };
           }
           key = fr.access;
         }
-        const custom = await askCustomAI(clean, { baseUrl: uk.base_url, apiKey: key, model: uk.model, provider: uk.provider });
-        if (custom.ok) return { ok: true, text: custom.text, mode: 'oauth', provider: uk.provider };
-        const free = await askFreeAI(clean);
-        if (free) return { ok: true, text: free, mode: 'free', customError: custom.error };
+        const custom = await askCustomAI(clean, { baseUrl: uk.base_url, apiKey: key, model: uk.model, provider: uk.provider }, hist);
+        if (custom.ok) { remember(custom.text); return { ok: true, text: custom.text, mode: 'oauth', provider: uk.provider }; }
+        const free = await askFreeAI(clean, hist);
+        if (free) { remember(free); return { ok: true, text: free, mode: 'free', customError: custom.error }; }
         return { ok: false, error: custom.error || 'AI is busy right now, try again later!' };
       }
     }
-    const cfg = getAIConfigFull(String(guildId));
+    const cfg = getAIConfigFull(gid);
     if (cfg.mode === 'custom' && cfg.baseUrl && cfg.apiKey) {
-      const custom = await askCustomAI(clean, { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, provider: cfg.provider });
-      if (custom.ok) return { ok: true, text: custom.text, mode: 'custom', provider: cfg.provider };
-      const free = await askFreeAI(clean);
-      if (free) return { ok: true, text: free, mode: 'free', customError: custom.error };
+      const custom = await askCustomAI(clean, { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, provider: cfg.provider }, hist);
+      if (custom.ok) { remember(custom.text); return { ok: true, text: custom.text, mode: 'custom', provider: cfg.provider }; }
+      const free = await askFreeAI(clean, hist);
+      if (free) { remember(free); return { ok: true, text: free, mode: 'free', customError: custom.error }; }
       return { ok: false, error: custom.error || 'AI is busy right now, try again later!' };
     }
     // Code gating (only when REQUIRE_JOIN_CODE/AI_AUTH_CODE set and no custom endpoint)
-    if (isCodeRequired() && userId && !isUserAuthorized(String(guildId), String(userId))) {
+    if (isCodeRequired() && uid && !isUserAuthorized(gid, uid)) {
       return { ok: false, needAuth: true, error: 'AI is locked! Get a join code from the admin dashboard, then type `/join <code>`.' };
     }
   }
 
-  const free = await askFreeAI(clean);
-  if (free) return { ok: true, text: free, mode: 'free' };
+  const free = await askFreeAI(clean, hist);
+  if (free) { remember(free); return { ok: true, text: free, mode: 'free' }; }
   return { ok: false, error: 'AI is busy right now, try again later!' };
 }

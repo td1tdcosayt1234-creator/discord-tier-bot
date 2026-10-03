@@ -3,10 +3,10 @@ import { timingSafeEqual } from 'node:crypto';
 import {
   getAIConfig, getAIConfigFull, setAICustom, setAIModel, clearAIConfig,
   authorizeUser, revokeUser, isUserAuthorized, countAuthorized,
-  getUserKey, clearUserKey, isBotAdmin,
+  getUserKey, clearUserKey, isBotAdmin, clearHistory,
 } from '../db.js';
 import { isAuthRequired, maskKey, validateCustomInput, validateProviderInput, askCustomAI, AI_PROVIDERS } from '../ai.js';
-import { createLogin, exchangeCode, startHFDevice, pollHFDevice, saveHFLogin, hfConfigured, startGoogleLogin } from '../oauth.js';
+import { createLogin, exchangeCode, startHFDevice, pollHFDevice, saveHFLogin, hfConfigured, startGoogleLogin, startGitHubDevice, pollGitHubDevice, saveGitHubLogin } from '../oauth.js';
 
 function isMod(member) {
   if (!member?.permissions) return false;
@@ -43,8 +43,10 @@ function hitRateLimit(userId) {
 function usage(prefix) {
   const plist = Object.keys(AI_PROVIDERS).join(' | ');
   return [
-    `**No key needed (browser login):**`,
-    `\`${prefix}connect login [openrouter|huggingface|google]\` — log in on the site, no key (default: openrouter)`,
+    `**No key needed (browser/device login):**`,
+    `\`${prefix}connect login [openrouter|google|huggingface|github]\` — log in on the site, no key (default: openrouter)`,
+    `\`${prefix}connect models [search]\` — list free OpenRouter models`,
+    `\`${prefix}connect model <id>\` — set your model from the free list`,
     `\`${prefix}connect code <CODE>\` — paste the OpenRouter code to connect!`,
     ``,
     `**1) Auth code** (free AI, owner gives code):`,
@@ -54,10 +56,9 @@ function usage(prefix) {
     `\`${prefix}connect gemini <API_KEY> [model]\` — key: https://aistudio.google.com/apikey`,
     `\`${prefix}connect openai | groq | openrouter | deepseek <KEY> [model]\``,
     `\`${prefix}connect huggingface | xai | cerebras | fireworks <KEY> [model]\``,
-    `\`${prefix}connect together | mistral <KEY> [model]\``,
+    `\`${prefix}connect together | mistral | github-models <KEY> [model]\``,
     `\`${prefix}connect api <BASE_URL> <KEY> [model]\` — custom URL`,
     ``,
-    `\`${prefix}connect model <name>\` — change model`,
     `\`${prefix}connect test <q>\` — test current endpoint`,
     `\`${prefix}connect status\` — show mode + provider`,
     `\`${prefix}connect free\` — back to free`,
@@ -146,8 +147,25 @@ export default {
         }).catch(() => {});
         return;
       }
+      if (which === 'github' || which === 'gh') {
+        const thinking = await message.reply('🔑 Starting GitHub login...').catch(() => null);
+        const d = await startGitHubDevice();
+        if (!d.ok) {
+          if (thinking) return thinking.edit(`❌ ${d.error}`).catch(() => {});
+          return message.reply(`❌ ${d.error}`).catch(() => {});
+        }
+        const txt = `🔑 **GitHub login**\n**1.** Open: ${d.url}\n**2.** Enter this code: \`${d.userCode}\`\n**3.** Authorize — I'll detect it automatically (waiting up to 5 min)...`;
+        if (thinking) await thinking.edit(txt).catch(() => {});
+        else await message.reply(txt).catch(() => {});
+        pollGitHubDevice(d.deviceCode, d.interval).then(r => {
+          if (!r.ok) return message.channel.send(`❌ <@${userId}> GitHub login: ${r.error}`).catch(() => {});
+          const model = saveGitHubLogin(guildId, userId, r.token);
+          message.channel.send(`✅ <@${userId}> connected via **GitHub Models**! Model: \`${model}\` — try \`!ai hello\`.`).catch(() => {});
+        }).catch(() => {});
+        return;
+      }
       if (which !== 'openrouter' && which !== 'or') {
-        return message.reply(`❌ Unknown login provider! Try \`${prefix}connect login\`, \`${prefix}connect login google\` or \`${prefix}connect login huggingface\``);
+        return message.reply(`❌ Unknown login provider! Try \`${prefix}connect login\`, \`${prefix}connect login google\`, \`${prefix}connect login huggingface\` or \`${prefix}connect login github\``);
       }
       const { url } = createLogin(guildId, userId);
       const embed = new EmbedBuilder()
@@ -218,13 +236,28 @@ export default {
       return message.channel.send(`✅ Custom AI connected!\n• URL: \`${v.base}\`\n• Model: \`${v.model}\`\n• Key: \`${maskKey(v.key)}\`\nTry \`!ai hello\``);
     }
 
+    if (sub === 'models') {
+      const q = args.slice(1).join(' ').trim().slice(0, 80);
+      const { formatFreeModels } = await import('../models.js');
+      const f = await formatFreeModels(q, 15);
+      const body = f.lines.length ? f.lines.join('\n') : 'No matches! Try another search.';
+      const txt = `🆓 **Free OpenRouter models** (${f.total} found${f.live ? '' : ', cached list — API offline'}):\n${body}\n\nSet one: \`${prefix}connect model <id>\``;
+      return message.reply(txt.slice(0, 1900)).catch(() => {});
+    }
+
     if (sub === 'model') {
-      if (!canManage(message)) return message.reply('❌ Mods only!');
-      const model = args.slice(1).join(' ').trim().slice(0, 120);
-      if (!model || !/^[\w.:/\-]+$/.test(model)) return message.reply(`❌ Usage: \`${prefix}connect model <name>\` (e.g. \`gemini-2.0-flash\`)`);
-      const ok = setAIModel(guildId, model);
+      const { isValidModelName } = await import('../models.js');
+      const clean = isValidModelName(args.slice(1).join(' '));
+      if (!clean) return message.reply(`❌ Usage: \`${prefix}connect model <name>\` — see \`${prefix}connect models\` for the free list!`);
+      if (getUserKey(guildId, userId)?.api_key) {
+        const { setUserModel } = await import('../db.js');
+        setUserModel(guildId, userId, clean);
+        return message.reply(`✅ Your model set to \`${clean}\``);
+      }
+      if (!canManage(message)) return message.reply('❌ Mods only! (for yourself use `!!connect login` first, then set your model)');
+      const ok = setAIModel(guildId, clean);
       if (!ok) return message.reply(`⚠️ No custom AI set yet! First: \`${prefix}connect gemini <KEY>\` or \`${prefix}connect api ...\``);
-      return message.reply(`✅ Model set to \`${model}\``);
+      return message.reply(`✅ Model set to \`${clean}\``);
     }
 
     if (sub === 'test') {
@@ -278,7 +311,8 @@ export default {
     if (sub === 'logout') {
       const removed = revokeUser(guildId, userId);
       const removedKey = clearUserKey(guildId, userId);
-      return message.reply(removed || removedKey ? '👋 Logged out from AI (login + auth cleared).' : 'ℹ️ You were not connected.');
+      clearHistory(guildId, userId);
+      return message.reply(removed || removedKey ? '👋 Logged out from AI (login + auth + chat memory cleared).' : 'ℹ️ You were not connected.');
     }
 
     return message.reply(`❓ Unknown! Try:\n${usage(prefix)}`);

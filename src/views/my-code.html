@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Join Code — Tier Bot</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .wrap { max-width: 560px; margin: 40px auto; text-align: center; }
+  .big-code { font-size: 42px; font-weight: 900; letter-spacing: 6px; background: #14151b; border: 1px dashed rgba(88,101,242,.6); border-radius: 16px; padding: 22px 10px; margin: 18px 0; cursor: pointer; color: #fff; }
+  .cmd { background: #26272f; padding: 3px 10px; border-radius: 7px; font-family: monospace; }
+</style>
+</head>
+<body>
+<div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+<div class="grid-overlay"></div>
+<nav>
+  <span class="logo">🤖 TierBot</span>
+  <a data-page href="/">Home</a>
+  <a data-page href="/user">My Dashboard</a>
+  <a data-page href="/my-code">My Code</a>
+  <a data-page href="/dashboard">Dashboard</a>
+  <span class="dot" id="navDot"></span>
+</nav>
+<main>
+  <div class="wrap">
+    <h1 style="color:#fff">🎟️ My Join Code</h1>
+    <p class="sub">Login with Discord → get 1 personal code → use it in Discord with <span class="cmd">/join 12345678</span></p>
+    <div id="loginBox" style="display:none">
+      <a class="btn" href="/api/discord-login" style="display:inline-block;padding:12px 22px;margin-top:14px">Continue with Discord</a>
+      <p class="hint">Any Discord user can login. Admins go to Dashboard, members stay here.</p>
+    </div>
+    <div id="codeBox" style="display:none">
+      <div class="hint" id="hello"></div>
+      <div class="big-code" id="code" title="Click to copy">••••••••</div>
+      <div class="err" id="err"></div>
+      <p class="sub">Discord এ গিয়ে লিখো: <span class="cmd" id="joinCmd">/join …</span></p>
+      <p class="hint">Code single-use (1/1). Used হয়ে গেলে নতুন code পাবে না — শুধু 1টা করেই পাবে। Admin revoke করলে নতুনটা claim করতে পারবে।</p>
+    </div>
+  </div>
+</main>
+<script src="/nav.js"></script>
+<script>
+  (async function () {
+    try {
+      const me = await (await fetch('/api/me')).json();
+      if (me.login || !me.user) {
+        document.getElementById('loginBox').style.display = 'block';
+        return;
+      }
+      document.getElementById('codeBox').style.display = 'block';
+      document.getElementById('hello').textContent = `Logged in as ${me.user} (${me.role})`;
+      const r = await fetch('/api/my-code');
+      const d = await r.json();
+      if (!r.ok) {
+        document.getElementById('err').textContent = d.error || 'Failed!';
+        return;
+      }
+      const el = document.getElementById('code');
+      el.textContent = d.code;
+      document.getElementById('joinCmd').textContent = `/join ${d.code}`;
+      el.onclick = () => {
+        try { navigator.clipboard.writeText(d.code); document.getElementById('err').textContent = 'Copied!'; } catch {}
+      };
+    } catch {
+      document.getElementById('loginBox').style.display = 'block';
+    }
+  })();
+</script>
+</body>
+</html>

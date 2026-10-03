@@ -23,7 +23,11 @@ A cool Discord bot built with discord.js.
 - `!8ball <question>` - Magic 8-ball
 - `!roll [number]` - Roll a dice
 - `!joke` - Random joke
-- `!ai <question>` - Ask the AI
+- `!ai <question>` - Ask the AI (AUTO: files created only when needed)
+- `!ai coding auto|on|off` - Coding agent preference (default auto)
+- `!ai forget` - Erase chat memory on this server (the bot remembers last ~4 exchanges otherwise)
+- `!files` - List workspace files (coding mode)
+- `!get <path>` - Download a workspace file
 - `!say <text>` - Bot echoes text (blocks @everyone)
 - `!avatar [@user]` - Get avatar
 - `!userinfo [@user]` - User info
@@ -44,11 +48,13 @@ A cool Discord bot built with discord.js.
 !!connect login                        # OpenRouter: link -> log in -> copy code
 !!connect login google                 # Google: sign in -> auto-connected (Gemini)
 !!connect login huggingface            # HF: enter the shown code on the site, auto-connects
+!!connect login github                 # GitHub: enter the shown code on github.com/login/device, auto-connects
 !!connect code <CODE>                  # paste the OpenRouter code -> connected, no key
 !!connect status                       # see your login + server mode
 !!connect logout                       # logout
 ```
-- Keyless browser logins: **OpenRouter** (PKCE, works out of the box), **Google** (Gemini, needs `GOOGLE_CLIENT_ID/SECRET` + redirect URI once) and **Hugging Face** (device flow, needs `HF_CLIENT_ID` once).
+- Keyless browser/device logins: **OpenRouter** (PKCE, works out of the box), **Google** (Gemini, needs `GOOGLE_CLIENT_ID/SECRET` + redirect URI once), **Hugging Face** (device flow, needs `HF_CLIENT_ID` once) and **GitHub** (device flow, needs `GITHUB_CLIENT_ID` once — OAuth App with Device Flow enabled).
+- Free models: `!!connect models [search]` lists live free OpenRouter models; `/connect model` has a searchable dropdown; `!!connect model <id>` / `/connect model` sets YOUR model (mods without a login set the server key's model instead).
 - After login you can use 400+ models including Gemini with `!ai`, each user on their own login.
 - Server-wide key instead (mods): `!!connect gemini <KEY>`, `!!connect openai/groq/openrouter/huggingface/xai/cerebras/fireworks <KEY>`, `!!connect api <URL> <KEY>`.
 
@@ -86,6 +92,7 @@ AI_AUTH_CODE=mysecret123
 !!connect xai xai-...                 # key: https://console.x.ai
 !!connect cerebras csk-...            # key: https://cloud.cerebras.ai
 !!connect fireworks fw_...            # key: https://fireworks.ai
+!!connect github-models github_pat_... # key: https://github.com/settings/tokens (Models: read)
 !!connect api https://... sk-...      # custom OpenAI-compatible URL
 !!connect model gemini-2.0-flash
 !!connect test hello
@@ -94,6 +101,23 @@ AI_AUTH_CODE=mysecret123
 - `baseUrl` example: `https://api.openai.com/v1` (trailing `/chat/completions` auto-stripped)
 - key message is auto-deleted after saving; also clear it from chat history
 - custom endpoint bypasses auth-code requirement for that server
+
+## 🤖 AI Coding Agent
+
+The bot **remembers your last ~4 exchanges per server** — follow-up questions work
+(`My name is Rahim` → later `What is my name?`). Per-user memory, cleared with
+`!ai forget` (or `/ai forget`) and wiped on logout.
+
+```bash
+!ai coding auto   # default: normal chat, files created ONLY when needed
+!ai coding on     # always allow tools | !ai coding off = never
+!ai make me a todo.html page
+!files           # list created files
+!get todo.html   # download a file
+```
+
+- Coding agent: `!ai`/`/ai` acts smart by default (AUTO) — normal chat, and the model creates files ONLY when the task needs them. Tools **only**: file create/read/list (sandboxed to `./workspace/<server-id>/`), zip/unzip, and your server's MCP servers. No shell, no delete, no web fetch.
+- Needs an OpenAI-compatible login: `!!connect login github` (no key needed), OpenRouter/HuggingFace logins, or any platform key. Google-native OAuth logins are chat-only in coding mode (you'll get a hint message).
 
 ## Web Dashboard
 
