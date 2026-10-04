@@ -240,7 +240,9 @@ function googleRedirect() {
 }
 
 const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/cloud-platform',
+  'openid',
+  'email',
+  'profile',
   'https://www.googleapis.com/auth/generative-language.retriever',
 ].join(' ');
 
@@ -276,7 +278,7 @@ export async function finishGoogleLogin(code, state) {
     refresh_token: data.refresh_token || null,
     expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
   }), 'gemini-2.0-flash');
-  clearOAuthPending(s.guild_id, s.user_id);
+  clearOAuthPending(s.guild_id, s.user_id, 'google');
   return { ok: true, model: 'gemini-2.0-flash' };
 }
 

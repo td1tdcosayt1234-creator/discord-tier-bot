@@ -37,6 +37,13 @@ function hitRateLimit(userId) {
   const arr = (attempts.get(userId) || []).filter(t => now - t < 5 * 60 * 1000);
   arr.push(now);
   attempts.set(userId, arr);
+  if (attempts.size > 2000) {
+    for (const [k, v] of attempts) {
+      const recent = v.filter(t => now - t < 5 * 60 * 1000);
+      if (!recent.length) attempts.delete(k); else attempts.set(k, recent);
+      if (attempts.size <= 1000) break;
+    }
+  }
   return arr.length > 5;
 }
 
@@ -113,7 +120,18 @@ export default {
     }
 
     if (sub === 'login') {
-      const which = (args[1] || 'openrouter').toLowerCase();
+      if (hitRateLimit(`login:${userId}`)) return message.reply('⏳ Too many login tries! Wait 5 minutes.');
+      const { getLoginProvider, keyLoginHelp, LOGIN_PROVIDERS } = await import('../providers.js');
+      const rawWhich = (args[1] || 'openrouter').toLowerCase();
+      const meta = getLoginProvider(rawWhich);
+      if (!meta) {
+        const ids = LOGIN_PROVIDERS.map(p => p.id).join(' | ');
+        return message.reply(`❌ Unknown provider! Try: \`${prefix}connect login <${ids}>\``);
+      }
+      if (meta.kind === 'key' || meta.kind === 'free') {
+        return message.reply(keyLoginHelp(meta, prefix).slice(0, 1900));
+      }
+      const which = meta.id;
       if (which === 'google' || which === 'gemini') {
         const g = startGoogleLogin(guildId, userId);
         if (!g.ok) return message.reply(`❌ ${g.error}`).catch(() => {});
@@ -184,6 +202,7 @@ export default {
     }
 
     if (sub === 'code' || sub === 'verify' || sub === 'callback') {
+      if (hitRateLimit(`code:${userId}`)) return message.channel.send('⏳ Too many tries! Wait 5 minutes.');
       const code = args.slice(1).join('').trim();
       message.delete().catch(() => {});
       if (!code) return message.channel.send(`❌ Usage: \`${prefix}connect code <CODE>\` — first run \`${prefix}connect login\`!`);
@@ -197,9 +216,12 @@ export default {
       const code = args.slice(1).join('').trim();
       message.delete().catch(() => {});
       if (!code) return message.channel.send(`❌ Usage: \`${prefix}connect auth <CODE>\` (ask the bot owner for the code)`);
-      if (hitRateLimit(userId)) return message.channel.send('⏳ Too many tries! Wait 5 minutes.');
+      if (hitRateLimit(`auth:${userId}`)) return message.channel.send('⏳ Too many tries! Wait 5 minutes.');
       const expected = String(process.env.AI_AUTH_CODE || '').trim();
       if (!expected) {
+        if (String(process.env.REQUIRE_JOIN_CODE || '').toLowerCase() === 'true') {
+          return message.channel.send('🔒 AI is locked! Ask an admin for a join code, then `/join <code>`.');
+        }
         authorizeUser(guildId, userId);
         return message.channel.send('✅ Free mode is on — no code needed. You can use `!ai` right away!');
       }
@@ -261,13 +283,14 @@ export default {
     }
 
     if (sub === 'test') {
+      if (hitRateLimit(`test:${userId}`)) return message.reply('⏳ Too many tests! Wait 5 minutes.');
       const myKey = getUserKey(guildId, userId);
       if (myKey?.api_key) {
         const q = args.slice(1).join(' ').trim() || 'Say OK';
         const thinking = await message.reply('🔌 Testing your login...');
         const r = await askCustomAI(q.slice(0, 300), { baseUrl: myKey.base_url, apiKey: myKey.api_key, model: myKey.model, provider: myKey.provider });
-        if (r.ok) return thinking.edit(`✅ Your login works! Reply: ${r.text.slice(0, 1500)}`);
-        return thinking.edit(`❌ Your login failed: ${r.error}`);
+        if (r?.ok) return thinking.edit(`✅ Your login works! Reply: ${String(r.text || '').slice(0, 1500)}`);
+        return thinking.edit(`❌ Your login failed: ${r?.error || 'failed'}`);
       }
       if (!canManage(message)) return message.reply('❌ Mods only! (for yourself use `!!connect login`)');
       const cfg = getAIConfigFull(guildId);
@@ -277,8 +300,16 @@ export default {
       const q = args.slice(1).join(' ').trim() || 'Say OK';
       const thinking = await message.reply('🔌 Testing...');
       const r = await askCustomAI(q.slice(0, 300), { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, provider: cfg.provider });
-      if (r.ok) return thinking.edit(`✅ Works! Reply: ${r.text.slice(0, 1500)}`);
-      return thinking.edit(`❌ Failed: ${r.error}`);
+      if (r?.ok) return thinking.edit(`✅ Works! Reply: ${String(r.text || '').slice(0, 1500)}`);
+      return thinking.edit(`❌ Failed: ${r?.error || 'failed'}`);
+    }
+
+    if (sub === 'providers' || sub === 'list') {
+      const { LOGIN_PROVIDERS } = await import('../providers.js');
+      const e = new EmbedBuilder().setTitle('🔌 AI Providers (16)').setColor(0x5865f2)
+        .setDescription(LOGIN_PROVIDERS.map(p => `${p.emoji} **${p.id}** — ${p.desc}`).join('\n').slice(0, 3500))
+        .setFooter({ text: 'Keyless: openrouter/google/huggingface/github • Free: pollinations' });
+      return message.reply({ embeds: [e] });
     }
 
     if (sub === 'free') {

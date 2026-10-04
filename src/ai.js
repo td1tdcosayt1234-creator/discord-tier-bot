@@ -98,6 +98,27 @@ export const AI_PROVIDERS = {
     keyUrl: 'https://github.com/settings/tokens',
     hint: 'github_pat_...',
   },
+  cohere: {
+    label: 'Cohere',
+    baseUrl: 'https://api.cohere.ai/compatibility/v1',
+    defaultModel: 'command-a-03-2025',
+    keyUrl: 'https://dashboard.cohere.com/api-keys',
+    hint: '...',
+  },
+  nebius: {
+    label: 'Nebius',
+    baseUrl: 'https://api.studio.nebius.com/v1',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
+    keyUrl: 'https://studio.nebius.com/settings/api-keys',
+    hint: '...',
+  },
+  pollinations: {
+    label: 'Pollinations',
+    baseUrl: 'https://text.pollinations.ai/openai',
+    defaultModel: 'openai',
+    keyUrl: 'https://pollinations.ai',
+    hint: 'free (no key)',
+  },
 };
 
 export const GEMINI_NATIVE_BASE = 'https://generativelanguage.googleapis.com/v1beta';

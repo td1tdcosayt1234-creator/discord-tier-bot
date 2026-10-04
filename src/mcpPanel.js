@@ -86,16 +86,26 @@ export async function handleMcpButton(interaction) {
     const txt = rows.map(r => `• **${r.name}** — \`${r.base_url}\`${r.hasAuth ? ` (auth set)` : ''}`).join('\n').slice(0, 1800);
     return interaction.reply({ content: `📋 MCP servers:\n${txt}`, ephemeral: true }).catch(() => {});
   }
-  if (id === 'mcp_test') return interaction.showModal(nameModal('mcp_test_modal', 'Test MCP Server', 'Server name')).catch(() => {});
-  if (id === 'mcp_tools') return interaction.showModal(nameModal('mcp_tools_modal', 'MCP Tools', 'Server name')).catch(() => {});
+  if (id === 'mcp_test') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
+    return interaction.showModal(nameModal('mcp_test_modal', 'Test MCP Server', 'Server name')).catch(() => {});
+  }
+  if (id === 'mcp_tools') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
+    return interaction.showModal(nameModal('mcp_tools_modal', 'MCP Tools', 'Server name')).catch(() => {});
+  }
   if (id === 'mcp_remove') {
     if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
     return interaction.showModal(nameModal('mcp_remove_modal', 'Remove MCP Server', 'Server name')).catch(() => {});
   }
   if (id === 'mcp_login') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
     return interaction.showModal(nameModal('mcp_login_modal', 'MCP Login (no token)', 'Server name (age Add kora)')).catch(() => {});
   }
-  if (id === 'mcp_call') return interaction.showModal(callModal()).catch(() => {});
+  if (id === 'mcp_call') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
+    return interaction.showModal(callModal()).catch(() => {});
+  }
 }
 
 export async function handleMcpModal(interaction) {
@@ -121,6 +131,7 @@ export async function handleMcpModal(interaction) {
     return interaction.reply({ content: ok ? `🗑️ **${f('name')}** deleted!` : '⚠️ Server not found!', ephemeral: true }).catch(() => {});
   }
   if (id === 'mcp_test_modal') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
     const s = getMcpServer(gid, f('name'));
     if (!s) return interaction.reply({ content: '⚠️ Server not found!', ephemeral: true }).catch(() => {});
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
@@ -128,6 +139,7 @@ export async function handleMcpModal(interaction) {
     return interaction.editReply(t.ok ? `✅ **${s.name}** OK!` : `❌ **${s.name}** fail: ${t.error}`).catch(() => {});
   }
   if (id === 'mcp_tools_modal') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
     const s = getMcpServer(gid, f('name'));
     if (!s) return interaction.reply({ content: '⚠️ Server not found!', ephemeral: true }).catch(() => {});
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
@@ -137,6 +149,7 @@ export async function handleMcpModal(interaction) {
     return interaction.editReply(`🛠️ **${s.name}** tools:\n${t.tools.map(x => `• **${x.name}** — ${x.description || 'no desc'}`).join('\n').slice(0, 1800)}`).catch(() => {});
   }
   if (id === 'mcp_call_modal') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
     const s = getMcpServer(gid, f('name'));
     if (!s) return interaction.reply({ content: '⚠️ Server not found!', ephemeral: true }).catch(() => {});
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
@@ -144,6 +157,7 @@ export async function handleMcpModal(interaction) {
     return interaction.editReply(r.ok ? `🛠️ Result:\n${r.text}` : `❌ ${r.error}`).catch(() => {});
   }
   if (id === 'mcp_login_modal') {
+    if (!canManageIx(interaction)) return interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
     const r = await startMcpLogin(gid, f('name'));
     if (!r.ok) return interaction.editReply(`❌ ${r.error}`).catch(() => {});

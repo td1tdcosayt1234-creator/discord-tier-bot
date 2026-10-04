@@ -21,24 +21,30 @@ export function validMcpName(name) {
 export function parseHeaders(input) {
   const s = String(input || '').trim();
   if (!s) return { ok: true, headers: {} };
+  if (s.length > 2000) return { ok: false, error: 'Headers too long (max 2000 chars)!' };
   try {
     if (s.startsWith('{')) {
       const o = JSON.parse(s);
       if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('bad json');
       const out = {};
       for (const [k, v] of Object.entries(o)) {
-        if (!k.trim() || /[\r\n]/.test(k)) throw new Error('bad key');
-        out[k.trim()] = String(v);
+        if (!k.trim() || /[\r\n]/.test(k) || /[\r\n]/.test(String(v))) throw new Error('bad key');
+        if (!/^[A-Za-z0-9-]+$/.test(k.trim())) throw new Error('bad key');
+        if (Object.keys(out).length >= 10) throw new Error('too many');
+        out[k.trim()] = String(v).slice(0, 500);
       }
       return { ok: true, headers: out };
     }
     const out = {};
-    for (const line of s.split('\n')) {
+    for (const line of s.split('\n').slice(0, 10)) {
       const t = line.trim();
       if (!t) continue;
       const i = t.indexOf(':');
       if (i < 1) throw new Error(`bad line: ${t}`);
-      out[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+      const hk = t.slice(0, i).trim(), hv = t.slice(i + 1).trim();
+      if (!hk || /[\r\n]/.test(hk) || /[\r\n]/.test(hv)) throw new Error('bad header');
+      if (!/^[A-Za-z0-9-]+$/.test(hk)) throw new Error('bad key');
+      out[hk] = hv.slice(0, 500);
     }
     return { ok: true, headers: out };
   } catch {

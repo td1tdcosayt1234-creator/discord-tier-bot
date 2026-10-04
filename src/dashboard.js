@@ -32,6 +32,13 @@ function aiRateLimited(ip) {
   const arr = (aiHits.get(ip) || []).filter(t => now - t < 60_000);
   arr.push(now);
   aiHits.set(ip, arr);
+  if (aiHits.size > 2000) {
+    for (const [k, v] of aiHits) {
+      const recent = v.filter(t => now - t < 60_000);
+      if (!recent.length) aiHits.delete(k); else aiHits.set(k, recent);
+      if (aiHits.size <= 1000) break;
+    }
+  }
   return arr.length > 15;
 }
 
@@ -105,6 +112,7 @@ export function startDashboard(client) {
   };
 
   // Audit log: who did what (no passwords/keys/tokens ever logged) — file + DB.
+  const cleanLog = s => String(s ?? '').replace(/[\r\n]+/g, ' ').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 200);
   const audit = (req, action, detail) => {
     const user = (() => { try { return sessionUser(req) || 'anon'; } catch { return 'anon'; } })();
     const ip = (() => { try { return getIp(req); } catch { return null; } })();
@@ -114,7 +122,7 @@ export function startDashboard(client) {
         return typeof g === 'string' && isValidGuildId(g) ? g : null;
       } catch { return null; }
     })();
-    const line = `${new Date().toISOString()} ip=${ip} user=${user} action=${action}${detail ? ' ' + String(detail).slice(0, 200) : ''}\n`;
+    const line = `${new Date().toISOString()} ip=${cleanLog(ip)} user=${cleanLog(user)} action=${cleanLog(action)}${detail ? ' ' + cleanLog(detail) : ''}\n`;
     console.log('[audit]', line.trim());
     try { appendFileSync(join(__dirname, '..', 'audit.log'), line); }
     catch { /* ignore */ }
@@ -214,6 +222,10 @@ export function startDashboard(client) {
   // ---- Login with Discord (OAuth2). Admins: bot-guild owners/admins or ADMIN_DISCORD_IDS.
   // Everyone else logs in as a member and can claim 1 personal /join code at /my-code.
   const discordStates = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, t] of discordStates) if (now - t > 10 * 60 * 1000) discordStates.delete(k);
+  }, 5 * 60 * 1000).unref?.();
   const discordRedirect = () => `${(process.env.DASHBOARD_URL || `http://localhost:${PORT}`).replace(/\/+$/, '')}/api/discord-callback`;
 
   app.get('/api/discord-login', (req, res) => {

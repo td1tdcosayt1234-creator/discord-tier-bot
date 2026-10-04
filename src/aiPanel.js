@@ -75,6 +75,21 @@ export async function handlePanelButton(interaction) {
   if (customId === 'ai_new') {
     await interaction.deferReply({ ephemeral: true }).catch(() => {});
     try {
+      // anti-spam: max 3 open AI channels per user + 1/min
+      const now = Date.now();
+      const recent = getUserSessions(guild.id, user.id).filter(r => guild.channels.cache.get(r.channel_id));
+      if (recent.length >= 3) {
+        return interaction.editReply({ content: '❌ Max 3 open AI chats! Close one with 🗑️ first.' }).catch(() => {});
+      }
+      const lastNew = globalThis.__aiNewHits?.get(user.id) || 0;
+      if (now - lastNew < 60 * 1000) {
+        return interaction.editReply({ content: '⏳ Wait a minute before opening another chat!' }).catch(() => {});
+      }
+      if (!globalThis.__aiNewHits) globalThis.__aiNewHits = new Map();
+      globalThis.__aiNewHits.set(user.id, now);
+      if (globalThis.__aiNewHits.size > 1000) {
+        for (const [k, t] of globalThis.__aiNewHits) if (now - t > 5 * 60 * 1000) globalThis.__aiNewHits.delete(k);
+      }
       const ch = await createSessionChannel(guild, user);
       return interaction.editReply({ content: `✅ Your private AI channel: <#${ch.id}>` }).catch(() => {});
     } catch (e) {

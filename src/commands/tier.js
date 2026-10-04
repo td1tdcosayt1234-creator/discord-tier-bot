@@ -146,6 +146,15 @@ export default {
     }
 
     if (sub === 'reset') {
+      const now = Date.now();
+      globalThis.__tierResetConfirm = globalThis.__tierResetConfirm || new Map();
+      const key = `${guildId}:${message.author.id}`;
+      const last = globalThis.__tierResetConfirm.get(key) || 0;
+      if (now - last > 30 * 1000) {
+        globalThis.__tierResetConfirm.set(key, now);
+        return message.reply(`⚠️ Confirm reset! Run \`${PREFIX}tier reset\` again within 30s to clear ALL players from **${getTierName(guildId)}**.`);
+      }
+      globalThis.__tierResetConfirm.delete(key);
       resetTierList(guildId);
       return message.reply('🔄 Tier list has been reset!');
     }

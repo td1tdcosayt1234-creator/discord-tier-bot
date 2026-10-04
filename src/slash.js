@@ -65,8 +65,9 @@ export function slashDefs() {
   connect.addSubcommand(s => s.setName('status').setDescription('Show AI mode + your login'));
   connect.addSubcommand(s => s.setName('login').setDescription('Log in on site, no API key needed')
     .addStringOption(o => o.setName('provider').setDescription('Login provider').setRequired(false)
-      .addChoices({ name: 'openrouter', value: 'openrouter' }, { name: 'google', value: 'google' }, { name: 'huggingface', value: 'huggingface' }, { name: 'github', value: 'github' })));
+      .addChoices({ name: 'openrouter', value: 'openrouter' }, { name: 'google', value: 'google' }, { name: 'huggingface', value: 'huggingface' }, { name: 'github', value: 'github' }, { name: 'pollinations-free', value: 'pollinations' }, { name: 'groq', value: 'groq' }, { name: 'cerebras', value: 'cerebras' }, { name: 'together', value: 'together' }, { name: 'fireworks', value: 'fireworks' }, { name: 'mistral', value: 'mistral' }, { name: 'deepseek', value: 'deepseek' }, { name: 'xai', value: 'xai' }, { name: 'cohere', value: 'cohere' }, { name: 'openai', value: 'openai' }, { name: 'gemini-key', value: 'gemini' }, { name: 'nebius', value: 'nebius' })));
   connect.addSubcommand(s => s.setName('code').setDescription('Paste login code').addStringOption(o => o.setName('code').setDescription('Code from site').setRequired(true)));
+  connect.addSubcommand(s => s.setName('providers').setDescription('List all 16 AI providers'));
   connect.addSubcommand(s => s.setName('auth').setDescription('Unlock with owner code').addStringOption(o => o.setName('code').setDescription('Owner code').setRequired(true)));
   connect.addSubcommand(s => s.setName('logout').setDescription('Remove your login/auth'));
   connect.addSubcommand(s => s.setName('test').setDescription('Test current AI').addStringOption(o => o.setName('question').setDescription('Test text').setRequired(false)));
@@ -104,6 +105,9 @@ export function slashDefs() {
   const clear = new SlashCommandBuilder().setName('clear').setDescription('Delete messages (mods)').addIntegerOption(o => o.setName('amount').setDescription('1-100').setRequired(true).setMinValue(1).setMaxValue(100));
   const join = new SlashCommandBuilder().setName('join').setDescription('Join with an 8-digit code from an admin')
     .addStringOption(o => o.setName('code').setDescription('8-digit code').setRequired(true).setMaxLength(16));
+  const cool = new SlashCommandBuilder().setName('cool').setDescription('Cool fun: coin, rps, quote, stats')
+    .addStringOption(o => o.setName('game').setDescription('coin|rps|quote|stats').setRequired(false))
+    .addStringOption(o => o.setName('pick').setDescription('For rps: rock|paper|scissors').setRequired(false));
 
   const mcp = new SlashCommandBuilder().setName('mcp').setDescription('MCP servers (baseUrl + optional header/auth)');
   mcp.addSubcommand(s => s.setName('panel').setDescription('Show MCP panel (mods)'));
@@ -122,7 +126,7 @@ export function slashDefs() {
     .addStringOption(o => o.setName('tool').setDescription('tool').setRequired(true))
     .addStringOption(o => o.setName('args').setDescription('JSON args').setRequired(false)));
 
-  return [ai, aipanel, ainew, aiclose, connect, tier, ping, help, eightball, roll, joke, say, avatar, userinfo, serverinfo, clear, mcp, join].map(c => c.toJSON());
+  return [ai, aipanel, ainew, aiclose, connect, tier, ping, help, eightball, roll, joke, say, avatar, userinfo, serverinfo, clear, mcp, join, cool].map(c => c.toJSON());
 }
 
 export async function registerSlash(client) {
@@ -210,11 +214,36 @@ export async function handleSlash(interaction) {
 
   if (name === 'ai') return aiAnswer(interaction, interaction.options.getString('prompt', true));
   if (name === 'ping') {
-    return interaction.reply(`🏓 Pong! API: **${Math.round(interaction.client.ws.ping)}ms**`).catch(() => {});
+    const ms = Math.round(interaction.client.ws.ping);
+    const color = ms < 150 ? 0x06d6a0 : ms < 300 ? 0xffd23f : 0xff4655;
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏓 Pong!').setColor(color).addFields({ name: 'API latency', value: `**${ms}ms**`, inline: true }, { name: 'Status', value: ms < 300 ? '🟢 Smooth' : '🟡 Laggy', inline: true }).setFooter({ text: 'Discord Tier Bot • cool edition' })] }).catch(() => {});
+  }
+  if (name === 'cool') {
+    const { randomInt } = await import('node:crypto');
+    const game = (interaction.options.getString('game') || 'coin').toLowerCase();
+    if (game === 'coin' || game === 'flip') {
+      const win = randomInt(0, 2) === 0;
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🪙 Coinflip').setColor(win ? 0xffd23f : 0x5865f2).setDescription(`# ${win ? 'HEADS ☀️' : 'TAILS 🌙'}`)] }).catch(() => {});
+    }
+    if (game === 'rps') {
+      const pick = (interaction.options.getString('pick') || '').toLowerCase();
+      const valid = ['rock', 'paper', 'scissors'];
+      if (!valid.includes(pick)) return interaction.reply({ content: '❓ Usage: `/cool game:rps pick:rock|paper|scissors`', ephemeral: true }).catch(() => {});
+      const bot = valid[randomInt(0, 3)];
+      const winMap = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+      const result = bot === pick ? '🤝 Draw!' : winMap[pick] === bot ? '🎉 You win!' : '🤖 Bot wins!';
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('✊✋✌️ RPS').setColor(0x9b5de5).addFields({ name: 'You', value: pick, inline: true }, { name: 'Bot', value: bot, inline: true }, { name: 'Result', value: result })] }).catch(() => {});
+    }
+    if (game === 'quote') {
+      const quotes = ['Stay hungry, stay foolish.', 'Grind now, shine later. ✨', 'Tier S mindset! 🏆', 'GGs only.'];
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('💬 Quote').setColor(0x06d6a0).setDescription(`> ${quotes[randomInt(0, quotes.length)]}`)] }).catch(() => {});
+    }
+    const up = Math.floor(process.uptime());
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('📊 Bot Stats').setColor(0x118ab2).addFields({ name: 'Uptime', value: `${Math.floor(up / 3600)}h ${Math.floor(up % 3600 / 60)}m`, inline: true }, { name: 'Servers', value: `${interaction.client.guilds.cache.size}`, inline: true }, { name: 'Ping', value: `${Math.round(interaction.client.ws.ping)}ms`, inline: true })] }).catch(() => {});
   }
   if (name === 'help') {
-    const e = new EmbedBuilder().setTitle('🤖 Bot Commands').setColor(0x5865f2).setDescription(
-      ['`/ai <prompt>` — Ask AI', '`/join <code>` — Join with admin code', '`/aipanel` — panel (mods)', '`/ainew` — private AI channel', '`/aiclose` — close', '`/connect status|login|code|auth|logout`', '`/mcp panel|add|list|test|tools|call` — MCP servers', '`/tier show|create|add|remove...`', '`/ping /eightball /roll /joke /say /avatar /userinfo /serverinfo /clear`', '', 'Prefix `!` / `!!` also works.'].join('\n'));
+    const e = new EmbedBuilder().setTitle('🤖✨ Discord Tier Bot — Cool Edition').setColor(0x5865f2).setDescription(
+      ['**AI:** `/ai <prompt>` `/ainew` `/aiclose` `/aipanel`', '**Connect (16 providers):** `/connect login|code|auth|key|api|model|models|providers|status|test|logout`', '**Tier:** `/tier show|create|delete|add|remove|emoji|setname|reset`', '**MCP:** `/mcp panel|add|list|test|tools|call|login|remove`', '**Fun:** `/cool` `/ping /eightball /roll /joke /say` `/avatar /userinfo /serverinfo` `/clear /join`', '', 'Prefix `!` / `!!` also works. Try `!cool quote` 🎲'].join('\n')).setFooter({ text: 'Tip: /connect providers shows all 16 AI options' });
     return interaction.reply({ embeds: [e] }).catch(() => {});
   }
   if (name === 'eightball') {
@@ -309,6 +338,12 @@ export async function handleSlash(interaction) {
     }
     if (sub === 'login') {
       const which = (interaction.options.getString('provider') || 'openrouter').toLowerCase();
+      // Key-guided providers: show key instructions (no fake keyless)
+      const { getLoginProvider, keyLoginHelp } = await import('./providers.js');
+      const meta = getLoginProvider(which);
+      if (meta && (meta.kind === 'key' || meta.kind === 'free')) {
+        return interaction.reply({ content: keyLoginHelp(meta, '/').slice(0, 1900), ephemeral: true }).catch(() => {});
+      }
       if (which === 'google' || which === 'gemini') {
         const g = startGoogleLogin(gid, uid);
         if (!g.ok) return interaction.reply({ content: `❌ ${g.error}`, ephemeral: true }).catch(() => {});
@@ -343,6 +378,11 @@ export async function handleSlash(interaction) {
       }
       const { url } = createLogin(gid, uid);
       return interaction.reply({ content: `**1.** Open + log in:\n${url}\n**2.** Copy the code and paste it into \`/connect code\` (10 min)!`, ephemeral: true }).catch(() => {});
+    }
+    if (sub === 'providers') {
+      const { LOGIN_PROVIDERS } = await import('./providers.js');
+      const lines = LOGIN_PROVIDERS.map(p => `${p.emoji} **${p.id}** — ${p.desc}`);
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔌 AI Providers (16)').setColor(0x5865f2).setDescription(lines.join('\n').slice(0, 3500)).setFooter({ text: 'Keyless: openrouter/google/huggingface/github • Free: pollinations • Rest: paste key' })], ephemeral: true }).catch(() => {});
     }
     if (sub === 'code') {
       const code = interaction.options.getString('code', true);
@@ -472,7 +512,18 @@ export async function handleSlash(interaction) {
       setTierName(g, nm);
       return interaction.reply({ content: '✏️ Renamed!', ephemeral: true }).catch(() => {});
     }
-    if (sub === 'reset') { resetTierList(g); return interaction.reply({ content: '🔄 Reset!', ephemeral: true }).catch(() => {}); }
+    if (sub === 'reset') {
+      const now = Date.now();
+      globalThis.__tierResetConfirm = globalThis.__tierResetConfirm || new Map();
+      const key = `${g}:${interaction.user.id}`;
+      const last = globalThis.__tierResetConfirm.get(key) || 0;
+      if (now - last > 30 * 1000) {
+        globalThis.__tierResetConfirm.set(key, now);
+        return interaction.reply({ content: '⚠️ Confirm reset! Run `/tier reset` again within 30s to clear ALL players.', ephemeral: true }).catch(() => {});
+      }
+      globalThis.__tierResetConfirm.delete(key);
+      resetTierList(g); return interaction.reply({ content: '🔄 Reset!', ephemeral: true }).catch(() => {});
+    }
   }
 
   if (name === 'mcp') {

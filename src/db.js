@@ -324,8 +324,9 @@ export function getOAuthPending(guildId, userId, provider = null) {
   return row.verifier;
 }
 
-export function clearOAuthPending(guildId, userId) {
-  db.prepare('DELETE FROM oauth_pending WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
+export function clearOAuthPending(guildId, userId, provider = null) {
+  if (provider) db.prepare('DELETE FROM oauth_pending WHERE guild_id = ? AND user_id = ? AND provider = ?').run(guildId, userId, provider);
+  else db.prepare('DELETE FROM oauth_pending WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
 }
 
 // Browser-redirect logins: state -> who started it (10 min valid, single use)
