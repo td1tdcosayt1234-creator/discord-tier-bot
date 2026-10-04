@@ -19,8 +19,30 @@ function ipv4Blocked(p) {
 function ipv6Blocked(ip) {
   const h = ip.toLowerCase();
   if (h === '::1' || h === '::') return true;
-  if (h.startsWith('fe80:') || h.startsWith('fec0:')) return true;
+  if (h.startsWith('fe80:') || h.startsWith('fec0:') || h.startsWith('fc00:') || h.startsWith('fd00:')) return true;
   if (/^(fc|fd)[0-9a-f]{2}:/.test(h)) return true;
+  // IPv4-mapped / NAT64 / 6to4 / Teredo can reach internal IPv4
+  if (h.startsWith('::ffff:')) {
+    const v4 = h.slice(7);
+    if (v4.includes('.')) {
+      const parts = v4.split('.').map(Number);
+      if (parts.length === 4 && parts.every(n => Number.isInteger(n) && n >= 0 && n <= 255) && ipv4Blocked(parts)) return true;
+    } else if (/^7f00?:/i.test(v4) || v4.startsWith('a9fe') || v4.startsWith('c0a8') || v4.startsWith('a00') || v4.startsWith('ac1')) return true;
+    return true; // block all mapped by default
+  }
+  if (h.startsWith('64:ff9b:')) return true; // NAT64
+  if (h.startsWith('2002:')) { // 6to4: embedded IPv4
+    const parts = h.split(':');
+    if (parts.length >= 3) {
+      const hi = parseInt(parts[1], 16), lo = parseInt(parts[2], 16);
+      if (!Number.isNaN(hi) && !Number.isNaN(lo)) {
+        const a = (hi >> 8) & 255, b = hi & 255;
+        if (ipv4Blocked([a, b])) return true;
+      }
+    }
+    return true;
+  }
+  if (h.startsWith('2001::') || h.startsWith('2001:0:')) return true; // Teredo
   return false;
 }
 
@@ -44,7 +66,7 @@ export async function isPublicHttpUrl(urlStr) {
     const addrs = await lookup(host, { all: true });
     if (!addrs.length) return false;
     for (const { address } of addrs) {
-      if (isIpLiteral(address) === false) continue;
+      if (isIpLiteral(address) === false) return false; // fail-closed on unexpected format
       if (address.includes(':')) { if (ipv6Blocked(address)) return false; }
       else {
         const parts = address.split('.').map(Number);
@@ -70,15 +92,29 @@ export function hasBadMentions(s) {
 // legacy plaintext rows. Key derived from server env (never stored in DB).
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 
+let __ephemeralKey = null;
 function sealKey() {
-  const secret = process.env.SESSION_SECRET || process.env.DASHBOARD_KEY || process.env.ADMIN_PASS || 'change-me';
+  const secret = process.env.SESSION_SECRET || process.env.DASHBOARD_KEY || process.env.ADMIN_PASS;
+  if (!secret || String(secret).length < 16 || secret === 'change-me' || secret === 'change_this_secret' || secret === 'change_this_password') {
+    // No secure env configured: use a random per-process key so nothing is
+    // decryptable across restarts / by attackers with default values.
+    if (!__ephemeralKey) {
+      __ephemeralKey = randomBytes(32);
+      console.warn('[security] SESSION_SECRET/DASHBOARD_KEY missing or weak — using ephemeral key. Set a long SESSION_SECRET in .env!');
+    }
+    return __ephemeralKey;
+  }
   return scryptSync(String(secret), 'tierbot-seal-v1', 32);
 }
 
 export function sealSecret(plain) {
   if (plain == null || plain === '') return plain;
   const s = String(plain);
-  if (s.startsWith('enc1.')) return s; // already sealed
+  if (s.startsWith('enc1.')) {
+    // Only skip re-encryption if it is a valid sealed value we can open.
+    if (openSecret(s) !== null) return s;
+    // else fall through and encrypt the literal (prevents prefix-bypass)
+  }
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', sealKey(), iv);
   const ct = Buffer.concat([cipher.update(s, 'utf8'), cipher.final()]);

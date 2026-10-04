@@ -11,13 +11,18 @@ function validTierName(tier) {
 }
 
 function validEmoji(emoji) {
+  if (typeof emoji !== 'string') return false;
+  if (hasBadMentions(emoji)) return false;
   const chars = Array.from(emoji);
   return chars.length >= 1 && chars.length <= 10 && !/\s/.test(emoji) && emoji.length <= 50;
 }
 
 function needsMod(message) {
-  if (message.member?.permissions?.has(PermissionsBitField.Flags.ManageMessages)) return true;
-  return isBotAdmin(message.guild.id, message.author.id);
+  try {
+    if (message.member?.permissions?.has(PermissionsBitField.Flags.ManageMessages)) return true;
+    if (message.guild?.id && isBotAdmin(message.guild.id, message.author.id)) return true;
+  } catch { /* deny */ }
+  return false;
 }
 
 function chunkPlayers(list) {

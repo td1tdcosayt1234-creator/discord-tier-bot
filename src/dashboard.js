@@ -17,7 +17,7 @@ import { authEnabled, checkLogin, signSession, signGoogleSession, signDiscordSes
 import { workspaceFiles, workspaceFileInfo, workspaceDeleteFile } from './agent.js';
 import { finishMcpLogin } from './mcpAuth.js';
 import { finishGoogleLogin, startDashboardGoogleLogin, finishDashboardGoogleLogin } from './oauth.js';
-import { hasBadMentions } from './util.js';
+import { hasBadMentions, escapeHtml } from './util.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -231,7 +231,7 @@ export function startDashboard(client) {
 
   app.get('/api/discord-callback', async (req, res) => {
     const { code, state, error, error_description } = req.query || {};
-    if (error) return res.status(400).send(`<h2>❌ Discord login failed: ${String(error_description || error).slice(0, 200)}</h2>`);
+    if (error) return res.status(400).send(`<h2>❌ Discord login failed: ${escapeHtml(String(error_description || error).slice(0, 200))}</h2>`);
     const at = discordStates.get(state);
     discordStates.delete(state);
     if (!code || !at || Date.now() - at > 10 * 60 * 1000) {
@@ -276,33 +276,33 @@ export function startDashboard(client) {
       audit(req, 'discord-login-ok', `discord=${me.id}`);
       res.redirect('/');
     } catch (e) {
-      res.status(500).send(`<h2>❌ Login error: ${String(e?.message || e).slice(0, 200)}</h2>`);
+      res.status(500).send(`<h2>❌ Login error: ${escapeHtml(String(e?.message || e).slice(0, 200))}</h2>`);
     }
   });
 
   // AI OAuth callback (Google login; public — state verified, single use, 10 min)
   app.get('/api/oauth-callback', async (req, res) => {
     const { code, state, error, error_description } = req.query || {};
-    if (error) return res.status(400).send(`<h2>❌ Google login failed: ${String(error_description || error).slice(0, 200)}</h2><p>Go back to Discord and run <code>!!connect login google</code> again.</p>`);
+    if (error) return res.status(400).send(`<h2>❌ Google login failed: ${escapeHtml(String(error_description || error).slice(0, 200))}</h2><p>Go back to Discord and run <code>!!connect login google</code> again.</p>`);
     if (!code || !state) return res.status(400).send('<h2>❌ Missing code/state!</h2>');
     const r = await finishGoogleLogin(String(code), String(state));
-    if (!r.ok) return res.status(400).send(`<h2>❌ ${r.error}</h2><p>Go back to Discord and run <code>!!connect login google</code> again.</p>`);
-    res.send(`<h2>✅ Connected with Google!</h2><p>Model: <code>${r.model}</code>. Close this tab and use <code>!ai</code> in Discord.</p>`);
+    if (!r.ok) return res.status(400).send(`<h2>❌ ${escapeHtml(r.error)}</h2><p>Go back to Discord and run <code>!!connect login google</code> again.</p>`);
+    res.send(`<h2>✅ Connected with Google!</h2><p>Model: <code>${escapeHtml(r.model)}</code>. Close this tab and use <code>!ai</code> in Discord.</p>`);
   });
 
   // Google web login (Continue with Google; public — state verified, email allowlisted)
   app.get('/api/google-login', (req, res) => {
     const r = startDashboardGoogleLogin();
-    if (!r.ok) return res.status(400).send(`<h2>❌ ${r.error}</h2>`);
+    if (!r.ok) return res.status(400).send(`<h2>❌ ${escapeHtml(r.error)}</h2>`);
     res.redirect(r.url);
   });
 
   app.get('/api/google-callback', async (req, res) => {
     const { code, state, error, error_description } = req.query || {};
-    if (error) return res.status(400).send(`<h2>❌ Google login failed: ${String(error_description || error).slice(0, 200)}</h2>`);
+    if (error) return res.status(400).send(`<h2>❌ Google login failed: ${escapeHtml(String(error_description || error).slice(0, 200))}</h2>`);
     if (!code || !state) return res.status(400).send('<h2>❌ Missing code/state!</h2>');
     const r = await finishDashboardGoogleLogin(String(code), String(state));
-    if (!r.ok) return res.status(403).send(`<h2>❌ ${r.error}</h2><p><a href="/login">Back to login</a></p>`);
+    if (!r.ok) return res.status(403).send(`<h2>❌ ${escapeHtml(r.error)}</h2><p><a href="/login">Back to login</a></p>`);
     res.setHeader('Set-Cookie', secureCookie(req, signGoogleSession(r.email)));
     audit(req, 'google-login-ok', `email=${r.email}`);
     res.redirect('/');
@@ -311,12 +311,12 @@ export function startDashboard(client) {
   // MCP OAuth callback (public — verified by state, no login needed)
   app.get('/api/mcp-callback', async (req, res) => {
     const { code, state, error, error_description } = req.query || {};
-    if (error) return res.status(400).send(`<h2>❌ MCP login failed: ${String(error_description || error).slice(0, 200)}</h2><p>Go back to Discord and run <code>/mcp login</code> again.</p>`);
+    if (error) return res.status(400).send(`<h2>❌ MCP login failed: ${escapeHtml(String(error_description || error).slice(0, 200))}</h2><p>Go back to Discord and run <code>/mcp login</code> again.</p>`);
     if (!code || !state) return res.status(400).send('<h2>❌ Missing code/state!</h2>');
     const r = await finishMcpLogin(String(code), String(state));
-    if (!r.ok) return res.status(400).send(`<h2>❌ ${r.error}</h2><p>Go back to Discord and run <code>/mcp login</code> again.</p>`);
+    if (!r.ok) return res.status(400).send(`<h2>❌ ${escapeHtml(r.error)}</h2><p>Go back to Discord and run <code>/mcp login</code> again.</p>`);
     audit(req, 'mcp-login-ok', `server=${String(r.server || '').slice(0, 40)}`);
-    res.send(`<h2>✅ <code>${r.server}</code> connected!</h2><p>Close this tab and use <code>!ai</code> / <code>/mcp test</code> in Discord.</p>`);
+    res.send(`<h2>✅ <code>${escapeHtml(r.server)}</code> connected!</h2><p>Close this tab and use <code>!ai</code> / <code>/mcp test</code> in Discord.</p>`);
   });
 
   // Pages (homepage + my-code are public, admin pages need admin login)

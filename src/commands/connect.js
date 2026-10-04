@@ -113,7 +113,7 @@ export default {
     }
 
     if (sub === 'login') {
-      const which = (args[0] || 'openrouter').toLowerCase();
+      const which = (args[1] || 'openrouter').toLowerCase();
       if (which === 'google' || which === 'gemini') {
         const g = startGoogleLogin(guildId, userId);
         if (!g.ok) return message.reply(`❌ ${g.error}`).catch(() => {});

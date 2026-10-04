@@ -390,9 +390,11 @@ export function getUserSessions(guildId, userId) {
 
 // ---------- Join codes (8-digit, generated in admin panel, redeemed via /join) ----------
 
+import { randomInt } from 'node:crypto';
+
 function randomJoinCode() {
   let n = '';
-  for (let i = 0; i < 8; i++) n += Math.floor(Math.random() * 10);
+  for (let i = 0; i < 8; i++) n += String(randomInt(0, 10));
   return n;
 }
 
@@ -402,11 +404,15 @@ export function createJoinCode(guildId, role = 'user', label = null, maxUses = 0
   for (let i = 0; i < 10; i++) {
     if (!db.prepare('SELECT 1 FROM join_codes WHERE code = ?').get(code)) break;
     code = randomJoinCode();
+    if (i === 9) {
+      // extremely unlikely collision storm: fail instead of PK crash
+      throw new Error('Could not generate unique code, try again');
+    }
   }
   const expiresAt = expiresHours > 0 ? Date.now() + expiresHours * 3600 * 1000 : 0;
   db.prepare(
     'INSERT INTO join_codes (code, guild_id, role, label, max_uses, uses, expires_at, revoked, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, 0, ?)'
-  ).run(code, guildId || null, role, label || null, Math.max(0, maxUses | 0), expiresAt, Date.now());
+  ).run(code, guildId || null, role, label ? String(label).slice(0, 100) : null, Math.max(0, maxUses | 0), expiresAt, Date.now());
   return { code, role, maxUses: Math.max(0, maxUses | 0), expiresAt };
 }
 
@@ -416,7 +422,8 @@ export function listJoinCodes(guildId) {
 }
 
 export function revokeJoinCode(code) {
-  const res = db.prepare('UPDATE join_codes SET revoked = 1 WHERE code = ?').run(String(code).trim());
+  const norm = String(code || '').replace(/\D/g, '').slice(0, 8) || String(code || '').trim();
+  const res = db.prepare('UPDATE join_codes SET revoked = 1 WHERE code = ?').run(norm);
   return res.changes > 0;
 }
 
@@ -424,13 +431,18 @@ export function revokeJoinCode(code) {
 export function redeemJoinCode(rawCode, guildId, userId) {
   const code = String(rawCode || '').replace(/\D/g, '').slice(0, 8);
   if (code.length !== 8) return { ok: false, error: 'Invalid code! It must be 8 digits. Usage: `/join 12345678`.' };
+  if (!guildId || !userId) return { ok: false, error: 'Server-only! Use /join inside a server.' };
   const row = db.prepare('SELECT * FROM join_codes WHERE code = ?').get(code);
   if (!row) return { ok: false, error: 'Wrong code! Check it and try again.' };
   if (row.revoked) return { ok: false, error: 'This code was revoked! Ask an admin for a new one.' };
   if (row.guild_id && row.guild_id !== guildId) return { ok: false, error: 'This code is for another server!' };
   if (row.expires_at && row.expires_at < Date.now()) return { ok: false, error: 'This code expired! Ask an admin for a new one.' };
   if (row.max_uses > 0 && row.uses >= row.max_uses) return { ok: false, error: 'This code is used up! Ask an admin for a new one.' };
-  db.prepare('UPDATE join_codes SET uses = uses + 1 WHERE code = ?').run(code);
+  // Atomic single-use guard: only increment when still under limit (prevents concurrent double-redeem)
+  const upd = row.max_uses > 0
+    ? db.prepare('UPDATE join_codes SET uses = uses + 1 WHERE code = ? AND uses < ?').run(code, row.max_uses)
+    : db.prepare('UPDATE join_codes SET uses = uses + 1 WHERE code = ?').run(code);
+  if (upd.changes === 0) return { ok: false, error: 'This code is used up! Ask an admin for a new one.' };
   authorizeUser(guildId, userId);
   if (row.role === 'admin') {
     db.prepare('INSERT INTO bot_admins (guild_id, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT(guild_id, user_id) DO NOTHING').run(guildId, userId, Date.now());

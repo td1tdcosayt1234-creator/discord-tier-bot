@@ -18,11 +18,30 @@ import { EIGHT_BALL_RESPONSES, JOKES } from './data.js';
 import { hasBadMentions } from './util.js';
 
 function modOnly(interaction) {
-  const m = interaction.memberPermissions;
-  if (m?.has(PermissionsBitField.Flags.ManageMessages) || m?.has(PermissionsBitField.Flags.ManageGuild)) return true;
-  if (isBotAdmin(interaction.guildId, interaction.user.id)) return true;
+  try {
+    const m = interaction.memberPermissions;
+    if (m?.has(PermissionsBitField.Flags.ManageMessages) || m?.has(PermissionsBitField.Flags.ManageGuild)) return true;
+    if (interaction.guildId && isBotAdmin(interaction.guildId, interaction.user.id)) return true;
+  } catch { /* fall through to deny */ }
   interaction.reply({ content: '❌ Mods only!', ephemeral: true }).catch(() => {});
   return false;
+}
+
+// Guild-only guard: slash commands that need a server (tier/mcp/join/connect state)
+function needGuild(interaction) {
+  if (!interaction.guildId || !interaction.guild) {
+    interaction.reply({ content: '❌ Server-only command! Use this inside a server, not DMs.', ephemeral: true }).catch(() => {});
+    return false;
+  }
+  return true;
+}
+
+// Never echo @everyone/@here/role pings from AI/MCP output back into Discord.
+function sanitizeReply(s) {
+  return String(s || '')
+    .replace(/@everyone/gi, '@\u200beveryone')
+    .replace(/@here/gi, '@\u200bhere')
+    .replace(/<@&(\d+)>/g, '<@\u200b&$1>');
 }
 
 // 5 join tries / 5 min per user
@@ -109,7 +128,15 @@ export function slashDefs() {
 export async function registerSlash(client) {
   try {
     const token = process.env.DISCORD_TOKEN;
-    const appId = process.env.CLIENT_ID || client.user.id;
+    if (!token) {
+      console.error('[slash] DISCORD_TOKEN missing — skipping slash registration');
+      return;
+    }
+    const appId = process.env.CLIENT_ID || client.user?.id;
+    if (!appId) {
+      console.error('[slash] no application ID — skipping slash registration');
+      return;
+    }
     const rest = new REST({ version: '10' }).setToken(token);
     const body = slashDefs();
     const guildId = process.env.GUILD_ID;
@@ -119,13 +146,19 @@ export async function registerSlash(client) {
     // Individual upserts (no bulk PUT) so the portal's Entry Point command is preserved
     const existing = await rest.get(coll).catch(() => []);
     const byName = new Map((existing || []).map(c => [c.name, c]));
-    let created = 0, updated = 0;
+    let created = 0, updated = 0, failed = 0;
     for (const def of body) {
-      const ex = byName.get(def.name);
-      if (ex) { await rest.patch(one(ex.id), { body: def }); updated++; }
-      else { await rest.post(coll, { body: def }); created++; }
+      try {
+        const ex = byName.get(def.name);
+        if (ex) { await rest.patch(one(ex.id), { body: def }); updated++; }
+        else { await rest.post(coll, { body: def }); created++; }
+      } catch (e) {
+        failed++;
+        console.error(`[slash] upsert failed for /${def.name}:`, e.message);
+        // continue with remaining commands instead of aborting the whole loop
+      }
     }
-    console.log(`[slash] upserted ${body.length} commands (${created} new, ${updated} updated)${useGuild ? ` -> ${guildId}` : ' (global, may take up to 1h)'}`);
+    console.log(`[slash] upserted ${body.length} commands (${created} new, ${updated} updated${failed ? `, ${failed} failed` : ''})${useGuild ? ` -> ${guildId}` : ' (global, may take up to 1h)'}`);
   } catch (e) {
     console.error('[slash] register failed:', e.message);
   }
@@ -157,17 +190,18 @@ async function aiAnswer(interaction, prompt) {
     return interaction.reply({ content: `🤖 Coding mode is **${label}**. Toggle: \`/ai coding on|auto|off\`.`, ephemeral: true }).catch(() => {});
   }
   await interaction.deferReply().catch(() => {});
-  const r = await askAI(prompt.slice(0, 1000), interaction.guildId, interaction.user.id);
-  if (!r.ok) {
-    const err = r.needAuth ? `🔒 ${r.error}\nGet a code from the admin dashboard, then run \`/join <code>\`.` : `⚠️ ${r.error}`;
-    return interaction.editReply(err).catch(() => {});
+  const r = await askAI(String(prompt || '').slice(0, 1000), interaction.guildId, interaction.user.id);
+  if (!r || !r.ok) {
+    const err = r?.needAuth ? `🔒 ${r.error}\nGet a code from the admin dashboard, then run \`/join <code>\`.` : `⚠️ ${r?.error || 'AI failed!'}`;
+    return interaction.editReply(sanitizeReply(err)).catch(() => {});
   }
-  let t = r.text + (r.customError ? `\n\n_(note: custom failed (${r.customError}), used free)_` : '');
+  let t = String(r.text || '') + (r.customError ? `\n\n_(note: custom failed, used free)_` : '');
   if (r.mode === 'coding' && r.files?.length) {
-    t += `\n\n📁 Files: ${r.files.map(f => `\`${f}\``).join(', ')} — download: \`!get <path>\``;
+    const safeFiles = r.files.map(f => `\`${String(f).slice(0, 80).replace(/[`]/g, '')}\``).join(', ');
+    t += `\n\n📁 Files: ${safeFiles} — download: \`!get <path>\``;
   }
   if (t.length > 1900) t = t.slice(0, 1900) + '...';
-  return interaction.editReply(t).catch(() => {});
+  return interaction.editReply(sanitizeReply(t)).catch(() => {});
 }
 
 export async function handleSlash(interaction) {
@@ -184,34 +218,42 @@ export async function handleSlash(interaction) {
     return interaction.reply({ embeds: [e] }).catch(() => {});
   }
   if (name === 'eightball') {
-    const q = interaction.options.getString('question', true).slice(0, 500);
-    const a = EIGHT_BALL_RESPONSES[Math.floor(Math.random() * EIGHT_BALL_RESPONSES.length)];
-    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🎱 Magic 8-Ball').setColor(0x2b2d31).addFields({ name: '❓ Question', value: q }, { name: '💬 Answer', value: a })] }).catch(() => {});
+    const rawQ = interaction.options.getString('question', true).slice(0, 500);
+    if (hasBadMentions(rawQ)) return interaction.reply({ content: '❌ No mass mentions!', ephemeral: true }).catch(() => {});
+    const q = sanitizeReply(rawQ) || '(no question)';
+    const pool = Array.isArray(EIGHT_BALL_RESPONSES) && EIGHT_BALL_RESPONSES.length ? EIGHT_BALL_RESPONSES : ['Yes.'];
+    const a = pool[Math.floor(Math.random() * pool.length)];
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🎱 Magic 8-Ball').setColor(0x2b2d31).addFields({ name: '❓ Question', value: q.slice(0, 1024) }, { name: '💬 Answer', value: String(a).slice(0, 1024) })] }).catch(() => {});
   }
   if (name === 'roll') {
     const max = interaction.options.getInteger('max') || 6;
     return interaction.reply(`🎲 You rolled a **${Math.floor(Math.random() * max) + 1}** (out of ${max})!`).catch(() => {});
   }
-  if (name === 'joke') return interaction.reply(JOKES[Math.floor(Math.random() * JOKES.length)]).catch(() => {});
+  if (name === 'joke') {
+    const pool = Array.isArray(JOKES) && JOKES.length ? JOKES : ['Why did the bot restart? To get to the other guild!'];
+    return interaction.reply(sanitizeReply(pool[Math.floor(Math.random() * pool.length)]).slice(0, 1900)).catch(() => {});
+  }
   if (name === 'say') {
     const t = interaction.options.getString('text', true).slice(0, 1900);
-    if (/@everyone|@here|<@&/.test(t)) return interaction.reply({ content: '❌ No mass mentions!', ephemeral: true }).catch(() => {});
-    return interaction.reply(t).catch(() => {});
+    if (hasBadMentions(t)) return interaction.reply({ content: '❌ No mass mentions!', ephemeral: true }).catch(() => {});
+    return interaction.reply(sanitizeReply(t)).catch(() => {});
   }
   if (name === 'avatar') {
     const u = interaction.options.getUser('user') || interaction.user;
     return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`${u.username}'s Avatar`).setImage(u.displayAvatarURL({ size: 1024 })).setColor(0x5865f2)] }).catch(() => {});
   }
   if (name === 'userinfo') {
+    if (!needGuild(interaction)) return;
     const u = interaction.options.getUser('user') || interaction.user;
     let m = null;
-    try { m = await guild.members.fetch(u.id); } catch { m = null; }
+    try { m = await guild?.members?.fetch(u.id); } catch { m = null; }
     return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`👤 ${u.tag}`).setThumbnail(u.displayAvatarURL()).setColor(0x5865f2)
       .addFields({ name: 'ID', value: u.id, inline: true }, { name: 'Bot?', value: u.bot ? 'yes' : 'no', inline: true },
         { name: 'Joined Server', value: m?.joinedAt ? `<t:${Math.floor(m.joinedAt.getTime() / 1000)}:R>` : 'Unknown', inline: true },
         { name: 'Account Created', value: `<t:${Math.floor(u.createdAt.getTime() / 1000)}:R>`, inline: true })] }).catch(() => {});
   }
   if (name === 'serverinfo') {
+    if (!needGuild(interaction)) return;
     const g = guild;
     const e = new EmbedBuilder().setTitle(`📊 ${g.name}`).setColor(0x5865f2)
       .addFields({ name: 'Members', value: `${g.memberCount}`, inline: true }, { name: 'Channels', value: `${g.channels.cache.size}`, inline: true },
@@ -252,6 +294,7 @@ export async function handleSlash(interaction) {
   }
 
   if (name === 'connect') {
+    if (!needGuild(interaction)) return;
     const sub = interaction.options.getSubcommand();
     const gid = interaction.guildId, uid = interaction.user.id;
     if (sub === 'status') {
@@ -309,9 +352,15 @@ export async function handleSlash(interaction) {
     }
     if (sub === 'auth') {
       const { timingSafeEqual } = await import('node:crypto');
-      const code = interaction.options.getString('code', true).replace(/\s/g, '');
+      const code = interaction.options.getString('code', true).replace(/\s/g, '').slice(0, 128);
       const exp = String(process.env.AI_AUTH_CODE || '').trim();
-      if (!exp) { authorizeUser(gid, uid); return interaction.reply({ content: '✅ Free mode — unlocked!', ephemeral: true }).catch(() => {}); }
+      if (!exp) {
+        // Fail-closed when join-code gating is on; only auto-unlock in true free mode.
+        if (String(process.env.REQUIRE_JOIN_CODE || '').toLowerCase() === 'true') {
+          return interaction.reply({ content: '🔒 AI is locked! Ask an admin for a join code, then `/join <code>`.', ephemeral: true }).catch(() => {});
+        }
+        authorizeUser(gid, uid); return interaction.reply({ content: '✅ Free mode — unlocked!', ephemeral: true }).catch(() => {});
+      }
       const ok = code.length === exp.length && timingSafeEqual(Buffer.from(code), Buffer.from(exp));
       if (!ok) return interaction.reply({ content: '❌ Wrong code!', ephemeral: true }).catch(() => {});
       authorizeUser(gid, uid);
@@ -324,6 +373,7 @@ export async function handleSlash(interaction) {
       return interaction.reply({ content: a || b ? '👋 Logged out.' : 'ℹ️ Not connected.', ephemeral: true }).catch(() => {});
     }
     if (sub === 'test') {
+      if (!needGuild(interaction)) return;
       const q = interaction.options.getString('question') || 'Say OK';
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const { askCustomAI: t } = await import('./ai.js');
@@ -331,7 +381,7 @@ export async function handleSlash(interaction) {
       const src = my ? { baseUrl: my.base_url, apiKey: my.api_key, model: my.model, provider: my.provider } : (cfg.mode === 'custom' ? { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, provider: cfg.provider } : null);
       if (!src) return interaction.editReply('⚠️ No login/custom AI! `/connect login` first.').catch(() => {});
       const r = await t(q.slice(0, 300), src);
-      return interaction.editReply(r.ok ? `✅ Works: ${r.text.slice(0, 1500)}` : `❌ ${r.error}`).catch(() => {});
+      return interaction.editReply(r?.ok ? `✅ Works: ${sanitizeReply(String(r.text || '').slice(0, 1500))}` : `❌ ${sanitizeReply(r?.error || 'Test failed')}`).catch(() => {});
     }
     if (sub === 'free') {
       if (!modOnly(interaction)) return;
@@ -375,14 +425,15 @@ export async function handleSlash(interaction) {
   }
 
   if (name === 'tier') {
+    if (!needGuild(interaction)) return;
     const sub = interaction.options.getSubcommand();
     if (sub === 'show') {
-      const rows = getTierRows(gid0(interaction));
+      const rows = getTierRows(gid0(interaction)).slice(0, 25);
       const players = getPlayers(gid0(interaction));
       const e = new EmbedBuilder().setTitle(`🏆 ${getTierName(gid0(interaction))}`).setColor(0x5865f2).setFooter({ text: `Total: ${players.length}` });
       rows.forEach(r => {
-        const list = players.filter(p => p.tier === r.tier).map(p => `• ${p.player}`).join('\n').slice(0, 950) || '_empty_';
-        e.addFields({ name: `${r.emoji || '•'} ${r.tier}`, value: list });
+        const list = sanitizeReply(players.filter(p => p.tier === r.tier).map(p => `• ${p.player}`).join('\n')).slice(0, 950) || '_empty_';
+        e.addFields({ name: `${r.emoji || '•'} ${r.tier}`.slice(0, 256), value: list });
       });
       return interaction.reply({ embeds: [e] }).catch(() => {});
     }
@@ -391,6 +442,7 @@ export async function handleSlash(interaction) {
     if (sub === 'create') {
       const t = interaction.options.getString('name', true).toUpperCase();
       if (!/^[A-Z0-9+\-]{1,10}$/.test(t)) return interaction.reply({ content: '❌ Invalid name!', ephemeral: true }).catch(() => {});
+      if (getTierRows(g).length >= 20) return interaction.reply({ content: '❌ Max 20 tiers!', ephemeral: true }).catch(() => {});
       return interaction.reply({ content: createTier(g, t) ? `✅ Created **${t}**!` : '⚠️ Exists!', ephemeral: true }).catch(() => {});
     }
     if (sub === 'delete') {
@@ -408,7 +460,10 @@ export async function handleSlash(interaction) {
       return interaction.reply({ content: ok ? '🗑️ Removed!' : '⚠️ Not found!', ephemeral: true }).catch(() => {});
     }
     if (sub === 'emoji') {
-      const ok = setTierEmoji(g, interaction.options.getString('tier', true).toUpperCase(), interaction.options.getString('emoji', true));
+      const em = interaction.options.getString('emoji', true);
+      // reuse prefix-side validation: short emoji / custom :name: / clear
+      if (hasBadMentions(em) || em.length > 20) return interaction.reply({ content: '❌ Invalid emoji!', ephemeral: true }).catch(() => {});
+      const ok = setTierEmoji(g, interaction.options.getString('tier', true).toUpperCase(), em);
       return interaction.reply({ content: ok ? '✅ Set!' : '⚠️ Not found!', ephemeral: true }).catch(() => {});
     }
     if (sub === 'setname') {
@@ -421,6 +476,7 @@ export async function handleSlash(interaction) {
   }
 
   if (name === 'mcp') {
+    if (!needGuild(interaction)) return;
     const sub = interaction.options.getSubcommand();
     const gid = interaction.guildId;
     if (sub === 'panel') {
@@ -454,39 +510,52 @@ export async function handleSlash(interaction) {
       return interaction.reply({ content: ok ? '🗑️ Deleted!' : '⚠️ Not found!', ephemeral: true }).catch(() => {});
     }
     if (sub === 'test') {
+      if (!modOnly(interaction)) return;
       const s = getMcpServer(gid, interaction.options.getString('name', true));
       if (!s) return interaction.reply({ content: '⚠️ Not found!', ephemeral: true }).catch(() => {});
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const t = await testMcpServer(s.base_url, s.headers, s.auth);
-      return interaction.editReply(t.ok ? `✅ **${s.name}** OK!` : `❌ ${t.error}`).catch(() => {});
+      return interaction.editReply(t.ok ? `✅ **${s.name}** OK!` : `❌ ${sanitizeReply(t.error)}`).catch(() => {});
     }
     if (sub === 'login') {
+      if (!modOnly(interaction)) return;
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const r = await startMcpLogin(gid, interaction.options.getString('name', true));
-      if (!r.ok) return interaction.editReply(`❌ ${r.error}`).catch(() => {});
+      if (!r.ok) return interaction.editReply(`❌ ${sanitizeReply(r.error)}`).catch(() => {});
       return interaction.editReply(`🔑 **Login link (valid 10 min):**\n${r.url}\n\n1. Open the link and log in\n2. After authorize it connects automatically!`).catch(() => {});
     }
     if (sub === 'tools') {
+      if (!modOnly(interaction)) return;
       const s = getMcpServer(gid, interaction.options.getString('name', true));
       if (!s) return interaction.reply({ content: '⚠️ Not found!', ephemeral: true }).catch(() => {});
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const t = await listMcpTools(s);
-      if (!t.ok) return interaction.editReply(`❌ ${t.error}`).catch(() => {});
+      if (!t.ok) return interaction.editReply(`❌ ${sanitizeReply(t.error)}`).catch(() => {});
       if (!t.tools.length) return interaction.editReply('🛠️ No tools!').catch(() => {});
-      return interaction.editReply(`🛠️ **${s.name}**:\n${t.tools.map(x => `• **${x.name}** — ${x.description || ''}`).join('\n').slice(0, 1800)}`).catch(() => {});
+      return interaction.editReply(sanitizeReply(`🛠️ **${s.name}**:\n${t.tools.map(x => `• **${x.name}** — ${x.description || ''}`).join('\n').slice(0, 1800)}`)).catch(() => {});
     }
     if (sub === 'call') {
+      if (!modOnly(interaction)) return;
       const s = getMcpServer(gid, interaction.options.getString('server', true));
       if (!s) return interaction.reply({ content: '⚠️ Server not found!', ephemeral: true }).catch(() => {});
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       const r = await callMcpTool(s, interaction.options.getString('tool', true), interaction.options.getString('args') || '');
-      return interaction.editReply(r.ok ? `🛠️ Result:\n${r.text}`.slice(0, 1900) : `❌ ${r.error}`).catch(() => {});
+      return interaction.editReply(r.ok ? sanitizeReply(`🛠️ Result:\n${r.text}`).slice(0, 1900) : `❌ ${sanitizeReply(r.error)}`).catch(() => {});
     }
   }
 
   if (name === 'join') {
+    if (!needGuild(interaction)) return;
     if (joinRateLimited(interaction.user.id)) {
       return interaction.reply({ content: '⏳ Too many tries! Wait 5 minutes.', ephemeral: true }).catch(() => {});
+    }
+    // prune joinHits to avoid unbounded growth
+    if (joinHits.size > 2000) {
+      const now = Date.now();
+      for (const [k, arr] of joinHits) {
+        const recent = arr.filter(t => now - t < 5 * 60 * 1000);
+        if (!recent.length) joinHits.delete(k); else joinHits.set(k, recent);
+      }
     }
     const r = redeemJoinCode(interaction.options.getString('code', true), interaction.guildId, interaction.user.id);
     if (!r.ok) return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true }).catch(() => {});
@@ -510,8 +579,9 @@ export async function handleAutocomplete(interaction) {
       return;
     }
     if (interaction.commandName !== 'mcp') return interaction.respond([]);
-    if (focused.name !== 'name' && focused.name !== 'server') return interaction.respond([]);
-    const q = String(focused.value || '').toLowerCase();
+    const focusedMcp = interaction.options.getFocused(true);
+    if (focusedMcp.name !== 'name' && focusedMcp.name !== 'server') return interaction.respond([]);
+    const q = String(focusedMcp.value || '').toLowerCase();
     const rows = listMcpServers(interaction.guildId)
       .filter(r => r.name.toLowerCase().includes(q))
       .slice(0, 25)

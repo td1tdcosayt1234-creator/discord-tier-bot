@@ -1,7 +1,7 @@
 // Simple admin login for the web dashboard (no extra deps).
 // .env: ADMIN_USER + ADMIN_PASS set -> all pages/APIs (except /login + /api/health) need login.
 // Session = signed cookie (HMAC-SHA256), 7 days, HttpOnly.
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, randomBytes } from 'node:crypto';
 
 const SESSION_DAYS = 7;
 
@@ -10,7 +10,15 @@ export function authEnabled() {
 }
 
 function secret() {
-  return process.env.SESSION_SECRET || process.env.DASHBOARD_KEY || process.env.ADMIN_PASS || 'change-me';
+  const s = process.env.SESSION_SECRET || process.env.DASHBOARD_KEY || process.env.ADMIN_PASS;
+  if (!s || String(s).length < 16 || s === 'change-me' || s === 'change_this_secret' || s === 'change_this_password') {
+    if (!globalThis.__tbEphemeralSecret) {
+      globalThis.__tbEphemeralSecret = randomBytes(32).toString('hex');
+      console.warn('[security] SESSION_SECRET missing/weak — sessions invalidated on restart. Set SESSION_SECRET!');
+    }
+    return globalThis.__tbEphemeralSecret;
+  }
+  return s;
 }
 
 function b64urlEncode(s) {
@@ -119,11 +127,23 @@ export function sessionDiscordId(req) {
   try {
     const token = parseCookies(req).tb_session;
     if (!token) return null;
-    const parts = String(token).split('.');
-    const b64 = parts[0] === 'discord' && parts.length === 4 ? parts[1]
-      : parts[0] === 'member' && parts.length === 4 ? parts[1] : null;
-    if (!b64) return null;
-    const [id] = b64urlDecode(b64).split(':');
+    // Verify HMAC first — never trust unverified cookie payload.
+    let id = null;
+    if (token.startsWith('discord.')) {
+      const u = verifyDiscordSession(token);
+      // verifyDiscordSession returns username; re-derive id from verified payload
+      if (!u) return null;
+      const parts = String(token).split('.');
+      const [vid] = b64urlDecode(parts[1]).split(':');
+      id = vid;
+    } else if (token.startsWith('member.')) {
+      if (!verifyMemberSession(token)) return null;
+      const parts = String(token).split('.');
+      const [vid] = b64urlDecode(parts[1]).split(':');
+      id = vid;
+    } else {
+      return null;
+    }
     return /^\d{5,25}$/.test(id || '') ? id : null;
   } catch {
     return null;
@@ -137,6 +157,26 @@ export function sessionRole(req) {
   const token = parseCookies(req).tb_session;
   if (!token) return null;
   if (token.startsWith('member.')) return verifyMemberSession(token) ? 'member' : null;
+  if (token.startsWith('discord.')) {
+    const u = verifyDiscordSession(token);
+    if (!u) return null;
+    // Only allowlisted Discord IDs or verified mapping are admin.
+    // verifyDiscordSession alone does NOT grant admin — check allowlist via sessionUser caller.
+    // Here: discord. sessions are admin only if ADMIN_DISCORD_IDS includes the id;
+    // otherwise they are member-level. This prevents any-Discord-login = admin.
+    try {
+      const parts = String(token).split('.');
+      const [did] = b64urlDecode(parts[1]).split(':');
+      const allow = String(process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (allow.length === 0) {
+        // No allowlist configured: dashboard layer already checks guild ownership
+        // at login time and issues member sessions for non-admins, so a discord.
+        // session here means it passed that check.
+        return 'admin';
+      }
+      return allow.includes(did) ? 'admin' : 'member';
+    } catch { return null; }
+  }
   if (sessionUser(req)) return 'admin';
   return null;
 }
@@ -190,7 +230,15 @@ export function parseCookies(req) {
   for (const part of String(req.headers.cookie || '').split(';')) {
     const i = part.indexOf('=');
     if (i < 1) continue;
-    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim();
+    if (!k) continue;
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      out[k] = v; // malformed % encoding: keep raw instead of throwing 500
+    }
+    if (Object.keys(out).length > 50) break;
   }
   return out;
 }
@@ -230,11 +278,21 @@ export function clearCookie() {
 
 // 5 tries / 5 min per IP for /api/login
 const hits = new Map();
+function pruneMap(m, windowMs, maxSize = 2000) {
+  if (m.size <= maxSize) return;
+  const now = Date.now();
+  for (const [k, arr] of m) {
+    const recent = (arr || []).filter(t => now - t < windowMs);
+    if (!recent.length) m.delete(k); else m.set(k, recent);
+    if (m.size <= maxSize / 2) break;
+  }
+}
 export function loginRateLimited(ip) {
   const now = Date.now();
   const arr = (hits.get(ip) || []).filter(t => now - t < 5 * 60 * 1000);
   arr.push(now);
   hits.set(ip, arr);
+  pruneMap(hits, 5 * 60 * 1000);
   return arr.length > 5;
 }
 

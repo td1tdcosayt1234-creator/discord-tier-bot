@@ -30,18 +30,22 @@ const client = new Client({
 // Load all commands from src/commands
 const commands = new Map();
 const commandsDir = join(__dirname, 'src', 'commands');
-for (const file of readdirSync(commandsDir)) {
-  if (!file.endsWith('.js')) continue;
-  try {
-    const mod = await import(`./src/commands/${file}`);
-    if (!mod?.default?.name || typeof mod.default.execute !== 'function') {
-      console.warn(`[commands] skipped ${file}: missing default { name, execute }`);
-      continue;
+try {
+  for (const file of readdirSync(commandsDir)) {
+    if (!file.endsWith('.js')) continue;
+    try {
+      const mod = await import(`./src/commands/${file}`);
+      if (!mod?.default?.name || typeof mod.default.execute !== 'function') {
+        console.warn(`[commands] skipped ${file}: missing default { name, execute }`);
+        continue;
+      }
+      commands.set(mod.default.name, mod.default);
+    } catch (e) {
+      console.error(`[commands] failed to load ${file}:`, e.message);
     }
-    commands.set(mod.default.name, mod.default);
-  } catch (e) {
-    console.error(`[commands] failed to load ${file}:`, e.message);
   }
+} catch (e) {
+  console.error('[commands] cannot read commands dir:', e.message);
 }
 console.log(`[commands] loaded: ${[...commands.keys()].join(', ')}`);
 
@@ -56,14 +60,25 @@ function onCooldown(userId, cmd, ms) {
   const last = cooldowns.get(key) || 0;
   if (now - last < useMs) return Math.ceil((useMs - (now - last)) / 1000);
   cooldowns.set(key, now);
+  // prune to avoid unbounded memory growth
+  if (cooldowns.size > 5000) {
+    for (const [k, t] of cooldowns) {
+      if (now - t > Math.max(COOLDOWN_MS, AI_COOLDOWN_MS) * 2) cooldowns.delete(k);
+      if (cooldowns.size <= 3000) break;
+    }
+  }
   return 0;
 }
 
-client.once('clientReady', async () => {
+async function onReady() {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity(`${PREFIX}help | /aipanel`, { type: ActivityType.Playing });
+  try {
+    client.user.setActivity(`${PREFIX}help | /aipanel`, { type: ActivityType.Playing });
+  } catch { /* ignore */ }
   await registerSlash(client).catch(e => console.error('[slash]', e.message));
-});
+}
+client.once('ready', onReady);
+client.once('clientReady', onReady);
 
 client.on('error', console.error);
 client.on('shardError', console.error);
@@ -95,12 +110,12 @@ client.on('messageCreate', async message => {
         if (wait > 0) return message.reply(`Slow down! **${wait}s**.`).catch(() => {});
         const thinking = await message.reply('Thinking...').catch(() => null);
         const r = await askAI(message.content.trim().slice(0, 1000), message.guild.id, message.author.id);
-        if (!r.ok) {
-          const err = r.needAuth ? `🔒 ${r.error}\nType \`/join <code>\` with a dashboard code to unlock.` : `⚠️ ${r.error}`;
-          if (thinking) return thinking.edit(err).catch(() => {});
-          return message.reply(err).catch(() => {});
+        if (!r || !r.ok) {
+          const err = r?.needAuth ? `🔒 ${r.error}\nType \`/join <code>\` with a dashboard code to unlock.` : `⚠️ ${r?.error || 'AI failed!'}`;
+          if (thinking) return thinking.edit(err.slice(0, 1900)).catch(() => {});
+          return message.reply(err.slice(0, 1900)).catch(() => {});
         }
-        let t = r.text;
+        let t = String(r.text || '');
         if (t.length > 1900) t = t.slice(0, 1900) + '...';
         if (thinking) return thinking.edit(t).catch(() => {});
         return message.reply(t).catch(() => {});
@@ -128,6 +143,8 @@ client.on('messageCreate', async message => {
 
     const command = commands.get(commandName);
     if (!command) {
+      const waitUnknown = onCooldown(message.author.id, '__unknown__');
+      if (waitUnknown > 0) return;
       return message.reply(`Unknown command! Try \`${usedPrefix}help\`.`).catch(() => {});
     }
 
@@ -175,4 +192,8 @@ client.login(process.env.DISCORD_TOKEN).catch(err => {
   process.exit(1);
 });
 
-startDashboard(client);
+try {
+  startDashboard(client);
+} catch (e) {
+  console.error('[dashboard] failed to start:', e.message);
+}

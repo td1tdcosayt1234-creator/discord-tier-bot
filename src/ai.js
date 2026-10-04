@@ -182,10 +182,13 @@ async function postChat(url, body, apiKey, provider) {
       return { ok: false, status: res.status, error: errText.slice(0, 300) };
     }
     const data = await res.json().catch(() => null);
+    const rawContent = data?.choices?.[0]?.message?.content;
+    const rawReply = data?.reply;
+    const rawText = data?.text;
     const text =
-      data?.choices?.[0]?.message?.content?.trim() ||
-      data?.reply?.trim?.() ||
-      (typeof data?.text === 'string' ? data.text.trim() : '');
+      (typeof rawContent === 'string' ? rawContent.trim() : '') ||
+      (typeof rawReply === 'string' ? rawReply.trim() : '') ||
+      (typeof rawText === 'string' ? rawText.trim() : '');
     if (!text) return { ok: false, status: res.status, error: 'Empty response from AI' };
     return { ok: true, text };
   } catch (e) {
@@ -214,6 +217,10 @@ export async function askCustomAI(prompt, { baseUrl, apiKey, model, provider }, 
   const past = Array.isArray(history) ? history.filter(m => m?.role && m?.content).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content).slice(0, HISTORY_CHARS) })) : [];
   // Native Gemini transport (OAuth logins): {base}/models/{model}:generateContent
   if (provider === 'gemini' && /\/v1beta\/?$/.test(base)) {
+    const { isPublicHttpUrl, SSRF_ERROR } = await import('./util.js');
+    // base is a Google endpoint — still validate to block http/custom tampering
+    if (!(await isPublicHttpUrl(base))) return { ok: false, error: SSRF_ERROR };
+    if (!/^https:/i.test(base)) return { ok: false, error: SSRF_ERROR };
     return askGeminiNative(clean, base, apiKey, model || 'gemini-2.0-flash', past);
   }
   const { isPublicHttpUrl, SSRF_ERROR } = await import('./util.js');
@@ -340,7 +347,7 @@ export async function askAI(prompt, guildId, userId) {
           if (fr.error) {
             if (fr.reauth) return { ok: false, error: fr.error };
             const free = await askFreeAI(clean, hist);
-            if (free) { remember(free); return { ok: true, text: free, mode: 'free', customError: fr.error }; }
+            if (free) { remember(free); return { ok: true, text: free, mode: 'free' }; }
             return { ok: false, error: fr.error };
           }
           key = fr.access;
@@ -348,7 +355,7 @@ export async function askAI(prompt, guildId, userId) {
         const custom = await askCustomAI(clean, { baseUrl: uk.base_url, apiKey: key, model: uk.model, provider: uk.provider }, hist);
         if (custom.ok) { remember(custom.text); return { ok: true, text: custom.text, mode: 'oauth', provider: uk.provider }; }
         const free = await askFreeAI(clean, hist);
-        if (free) { remember(free); return { ok: true, text: free, mode: 'free', customError: custom.error }; }
+        if (free) { remember(free); return { ok: true, text: free, mode: 'free' }; }
         return { ok: false, error: custom.error || 'AI is busy right now, try again later!' };
       }
     }
@@ -357,7 +364,7 @@ export async function askAI(prompt, guildId, userId) {
       const custom = await askCustomAI(clean, { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, provider: cfg.provider }, hist);
       if (custom.ok) { remember(custom.text); return { ok: true, text: custom.text, mode: 'custom', provider: cfg.provider }; }
       const free = await askFreeAI(clean, hist);
-      if (free) { remember(free); return { ok: true, text: free, mode: 'free', customError: custom.error }; }
+      if (free) { remember(free); return { ok: true, text: free, mode: 'free' }; }
       return { ok: false, error: custom.error || 'AI is busy right now, try again later!' };
     }
     // Code gating (only when REQUIRE_JOIN_CODE/AI_AUTH_CODE set and no custom endpoint)

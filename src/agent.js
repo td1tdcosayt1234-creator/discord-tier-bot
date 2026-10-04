@@ -3,7 +3,7 @@
 // No shell, no delete, no network fetch. Works with OpenAI-compatible
 // endpoints (user OAuth keys like github/openrouter/huggingface, or server custom keys).
 // Google-native OAuth logins (Gemini generateContent) are NOT supported here.
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, lstatSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import AdmZip from 'adm-zip';
@@ -124,10 +124,17 @@ const TOOLS = [
 
 export async function execTool(name, args, guildId) {
   const a = args && typeof args === 'object' ? args : {};
+  const noSymlink = abs => {
+    try {
+      if (lstatSync(abs).isSymbolicLink()) return true;
+    } catch { /* not existing yet */ }
+    return false;
+  };
   try {
     if (name === 'read_file') {
       const r = resolvePath(guildId, a.path);
       if (!r.ok) return r.error;
+      if (noSymlink(r.abs)) return 'Blocked: symlinks not allowed!';
       let st;
       try { st = statSync(r.abs); } catch { return 'File not found!'; }
       if (!st.isFile()) return 'Not a file! Use list_files for folders.';
@@ -137,6 +144,7 @@ export async function execTool(name, args, guildId) {
     if (name === 'create_file') {
       const r = resolvePath(guildId, a.path);
       if (!r.ok) return r.error;
+      if (noSymlink(r.abs)) return 'Blocked: symlinks not allowed!';
       const content = String(a.content ?? '');
       if (Buffer.byteLength(content) > MAX_FILE_BYTES) return 'Content too big (>1MB)! Split into smaller files.';
       if (massMention(content)) return 'Blocked: no @everyone/@here/role mentions in files!';
@@ -163,22 +171,47 @@ export async function execTool(name, args, guildId) {
     }
     if (name === 'zip_files') {
       const files = Array.isArray(a.files) ? a.files : [];
-      if (!files.length || files.length > 100) return 'Give 1-100 files!';
+      if (!files.length || files.length > 20) return 'Give 1-20 files!';
       let out = String(a.out || '').trim();
       if (!out) return 'Missing out! Example out: "pack.zip".';
       if (!out.toLowerCase().endsWith('.zip')) out += '.zip';
       const ro = resolvePath(guildId, out);
       if (!ro.ok) return ro.error;
+      if (noSymlink(ro.abs)) return 'Blocked: symlinks not allowed!';
       const zip = new AdmZip();
       let total = 0;
-      for (const f of files.slice(0, 100)) {
+      const seen = new Set();
+      for (const f of files.slice(0, 20)) {
         const r = resolvePath(guildId, f);
         if (!r.ok) return `${f}: ${r.error}`;
+        if (seen.has(r.abs)) continue;
+        seen.add(r.abs);
+        if (noSymlink(r.abs)) return `${f}: symlinks blocked!`;
         let st;
         try { st = statSync(r.abs); } catch { return `${f}: not found!`; }
         if (st.isDirectory()) {
+          // cap directory zip: walk and sum, max 50 files / 100MB
+          const stack = [r.abs];
+          let count = 0;
+          while (stack.length && count < 50) {
+            const d = stack.pop();
+            let ents;
+            try { ents = readdirSync(d, { withFileTypes: true }); } catch { break; }
+            for (const e of ents) {
+              const p = join(d, e.name);
+              if (noSymlink(p)) return `${f}: symlink inside folder blocked!`;
+              if (e.isDirectory()) stack.push(p);
+              else if (e.isFile()) {
+                let s2;
+                try { s2 = statSync(p); } catch { continue; }
+                total += s2.size;
+                if (total > 100 * 1024 * 1024) return 'Total too big (>100MB)! Zip fewer files.';
+                count++;
+                if (count > 50) return 'Folder too many files (>50)!';
+              }
+            }
+          }
           zip.addLocalFolder(r.abs, r.rel);
-          total += 0;
         } else {
           if (st.size > 20 * 1024 * 1024) return `${f}: file too big for zip (>20MB)!`;
           total += st.size;
@@ -193,17 +226,26 @@ export async function execTool(name, args, guildId) {
     if (name === 'unzip_file') {
       const r = resolvePath(guildId, a.file);
       if (!r.ok) return r.error;
+      if (noSymlink(r.abs)) return 'Blocked: symlinks not allowed!';
       if (!existsSync(r.abs)) return 'Zip not found!';
+      let zipSize = 0;
+      try { zipSize = statSync(r.abs).size; } catch { return 'Zip not found!'; }
+      if (zipSize > 50 * 1024 * 1024) return 'Zip too big (>50MB)!';
       const defaultDir = dirname(r.rel) === '.' ? '.' : dirname(r.rel);
       const dest = resolvePath(guildId, a.dir || defaultDir);
       if (!dest.ok) return dest.error;
       let zip;
       try { zip = new AdmZip(r.abs); } catch { return 'Invalid zip file!'; }
-      for (const e of zip.getEntries()) {
+      const entries = zip.getEntries();
+      if (entries.length > 500) return 'Zip has too many files (>500)!';
+      let uncompressed = 0;
+      for (const e of entries) {
         const n = e.entryName.replace(/\\/g, '/');
         if (!n || n.startsWith('/') || /^[a-zA-Z]:/.test(n) || n.split('/').includes('..')) {
           return `Unsafe zip entry blocked: ${n.slice(0, 80)}`;
         }
+        uncompressed += e.header?.size || 0;
+        if (uncompressed > 100 * 1024 * 1024) return 'Uncompressed too big (>100MB)!';
       }
       const target = dest.rel === '.' ? join(__root, String(guildId)) : dest.abs;
       mkdirSync(target, { recursive: true });
@@ -343,7 +385,7 @@ export async function runAgent(prompt, guildId, userId, history = []) {
     const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls.filter(c => c?.type === 'function') : [];
     messages.push({ role: 'assistant', content: msg.content || null, tool_calls: calls.length ? calls.map(c => ({ id: c.id, type: 'function', function: { name: c.function.name, arguments: c.function.arguments } })) : undefined });
     if (!calls.length) {
-      const text = String(msg.content || '').trim();
+      const text = sanitizeAgent(String(msg.content || '').trim());
       remember(text);
       return { ok: true, text: text || '(done — no reply text)', files, mode: 'coding', provider: creds.provider };
     }
@@ -364,12 +406,19 @@ export async function runAgent(prompt, guildId, userId, history = []) {
   // Out of steps: force a summary from what we have.
   const r = await chatOnce({ ...creds, messages: [...messages, { role: 'user', content: 'You are out of tool steps. Summarize results + file paths briefly.' }] });
   if (r.ok && r.message?.content) {
-    const text = String(r.message.content).slice(0, 1900);
+    const text = sanitizeAgent(String(r.message.content).slice(0, 1900));
     remember(text);
     return { ok: true, text, files, mode: 'coding', provider: creds.provider };
   }
   const created = messages.filter(m => m.role === 'tool').length;
-  return { ok: true, text: `Done ${created} tool step(s). Files: ${files.join(', ') || 'see !ai files'}.`, files, mode: 'coding', provider: creds.provider };
+  return { ok: true, text: sanitizeAgent(`Done ${created} tool step(s). Files: ${files.join(', ') || 'see !ai files'}.`), files, mode: 'coding', provider: creds.provider };
+}
+
+function sanitizeAgent(s) {
+  return String(s || '')
+    .replace(/@everyone/gi, '@\u200beveryone')
+    .replace(/@here/gi, '@\u200bhere')
+    .replace(/<@&(\d+)>/g, '<@\u200b&$1>');
 }
 
 // Files created/touched this session (for the reply summary).

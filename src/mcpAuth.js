@@ -24,6 +24,11 @@ async function getJson(url, timeoutMs = 12000) {
 // Discover OAuth endpoints: RFC 9470 protected-resource metadata -> RFC 8414.
 // Tries path-inserted + origin-root candidates (Notion uses path form).
 export async function discoverOAuth(baseUrl) {
+  const { isPublicHttpUrl } = await import('./util.js');
+  if (!(await isPublicHttpUrl(baseUrl))) {
+    const { SSRF_ERROR } = await import('./util.js');
+    return { ok: false, error: SSRF_ERROR };
+  }
   let u;
   try { u = new URL(baseUrl); } catch { return { ok: false, error: 'Invalid base URL!' }; }
   const origin = u.origin;
@@ -35,13 +40,30 @@ export async function discoverOAuth(baseUrl) {
   ];
   let issuers = [];
   for (const c of cands) {
+    if (!(await isPublicHttpUrl(c))) continue;
     const prm = await getJson(c);
-    if (prm?.authorization_servers?.length) { issuers = prm.authorization_servers; break; }
+    if (prm?.authorization_servers?.length) {
+      // only accept public https issuers
+      issuers = prm.authorization_servers.filter(s => typeof s === 'string' && /^https:\/\//i.test(s));
+      if (issuers.length) break;
+    }
   }
   const servers = issuers.length ? issuers : [origin];
   for (const iss of servers) {
+    if (!(await isPublicHttpUrl(iss))) continue;
     const md = await getJson(`${String(iss).replace(/\/+$/, '')}/.well-known/oauth-authorization-server`);
     if (md?.authorization_endpoint && md?.token_endpoint) {
+      if (!(await isPublicHttpUrl(md.authorization_endpoint)) || !(await isPublicHttpUrl(md.token_endpoint))) continue;
+      if (md.registration_endpoint && !(await isPublicHttpUrl(md.registration_endpoint))) {
+        // skip insecure registration, keep endpoints but no dynamic registration
+        return {
+          ok: true,
+          authorizationEndpoint: md.authorization_endpoint,
+          tokenEndpoint: md.token_endpoint,
+          registrationEndpoint: null,
+          scopes: md.scopes_supported || [],
+        };
+      }
       return {
         ok: true,
         authorizationEndpoint: md.authorization_endpoint,
@@ -60,6 +82,8 @@ function publicBase() {
 }
 
 async function registerClient(regUrl, redirectUri) {
+  const { isPublicHttpUrl, SSRF_ERROR } = await import('./util.js');
+  if (!(await isPublicHttpUrl(regUrl))) return { ok: false, error: SSRF_ERROR };
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), 15000);
   try {
@@ -112,6 +136,8 @@ export async function startMcpLogin(guildId, serverName) {
 export async function finishMcpLogin(code, state) {
   const p = getMcpOAuth(state);
   if (!p) return { ok: false, error: 'State expired/invalid! Run /mcp login again in Discord (valid 10 min).' };
+  const { isPublicHttpUrl, SSRF_ERROR } = await import('./util.js');
+  if (!(await isPublicHttpUrl(p.token_url))) return { ok: false, error: SSRF_ERROR };
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), 20000);
   try {
@@ -148,6 +174,7 @@ export async function finishMcpLogin(code, state) {
 // Fresh access token (auto-refresh if expired). Returns { ok, access?, error? }
 export async function getValidAccessToken(guildId, serverName) {
   const { parseAuth } = await import('./mcp.js');
+  const { isPublicHttpUrl, SSRF_ERROR } = await import('./util.js');
   const s = getMcpServer(guildId, serverName);
   if (!s?.auth) return { ok: false, error: 'No auth saved! Run /mcp login.' };
   const a = parseAuth(s.auth);
@@ -157,6 +184,7 @@ export async function getValidAccessToken(guildId, serverName) {
   if (!a.refresh || !s.token_url || !s.client_id) {
     return { ok: false, error: 'Token expired! Run /mcp login again.', reauth: true };
   }
+  if (!(await isPublicHttpUrl(s.token_url))) return { ok: false, error: SSRF_ERROR };
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), 20000);
   try {
